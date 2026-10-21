@@ -1,0 +1,78 @@
+{
+  "ticket": "<slug>",
+  "project": null,
+  "worktree": "<worktree path>",
+  "repo": "<repos[].name>",
+  "repo_origin": "<origin url>",
+  "base_sha": "",
+  "platform": null,
+  "device": {},
+  "locks": [],
+  "build_output": "",
+  "depends_on": [],
+  "shape": "stack",
+  "publish": null,
+  "profile": null,
+  "model": null,
+  "effort": null,
+  "mcp": [],
+  "tools": null,
+  "delegation": "planner",
+  "robowright": {
+    "planner": "fable",
+    "lead": "opus",
+    "worker": "opus",
+    "explainer": "opus",
+    "reviewer_code": "opus",
+    "reviewer_prose": "sonnet",
+    "reader": "haiku"
+  },
+  "plan_review": "finish",
+  "plan_reviews": [],
+  "rebases": [],
+  "max_wall_hours": 10,
+  "wall_hours_extension_pct": 25,
+  "max_gate_attempts": 3,
+  "spend_threshold_usd": null,
+  "spend_cap_usd": null,
+  "rotate_sessions": true,
+  "compact_pct": 85,
+  "verification": {
+    "max_mutation_rounds_per_unit": 4,
+    "whole_suite_runs_owed": [
+      "unit-close",
+      "final-tip"
+    ],
+    "max_extra_review_subagents": 2,
+    "extra_review_subagents_used": 0,
+    "whole_suite_runs": []
+  },
+  "phase": "preflight",
+  "started_at": "",
+  "updated_at": "",
+  "session_id": "",
+  "rotate": null,
+  "rebriefs": [],
+  "units": [
+    {
+      "id": "U1",
+      "title": "",
+      "kind": "refactor",
+      "model": null,
+      "branch": "<branch>",
+      "status": "todo",
+      "head": "",
+      "gate_attempts": 0,
+      "mutation_rounds": 0,
+      "gate": {
+        "build": "",
+        "tests": "",
+        "kind_check": "",
+        "review": ""
+      },
+      "pr": null
+    }
+  ],
+  "cost": null,
+  "stop_reason": null
+}

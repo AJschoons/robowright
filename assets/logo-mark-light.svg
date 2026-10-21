@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-104 -104 208 208" width="32" height="32" role="img" aria-label="robowright mark">
+<circle r="96" fill="#F4F7FA" stroke="#12325A" stroke-width="11"/>
+<g transform="translate(0 14) scale(1.7)">
+  <rect x="-32" y="-22" width="64" height="54" rx="18" fill="none" stroke="#12325A" stroke-width="6.2"/>
+  <path d="M0 -22V-37" fill="none" stroke="#12325A" stroke-width="6.2" stroke-linecap="round"/>
+  <rect x="-4" y="-52" width="8" height="13" rx="1.5" fill="#A87300"/>
+  <ellipse cx="-13" cy="3" rx="6.5" ry="9.5" fill="#12325A"/>
+  <ellipse cx="13" cy="3" rx="6.5" ry="9.5" fill="#12325A"/>
+  <path d="M-35 -10C-39 -10 -40 -8 -40 -4L-40 0C-40 4 -42 5 -46 5C-42 5 -40 6 -40 10L-40 14C-40 18 -39 20 -35 20" fill="none" stroke="#A87300" stroke-width="6.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M35 -10C39 -10 40 -8 40 -4L40 0C40 4 42 5 46 5C42 5 40 6 40 10L40 14C40 18 39 20 35 20" fill="none" stroke="#A87300" stroke-width="6.6" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robowright — the site plan</title>
+<link rel="stylesheet" href="kit.css">
+</head>
+<body>
+<main class="hero-sheet">
+  <div id="hero"></div>
+</main>
+
+<script type="module">
+  import { mountHero } from './hero.js';
+  mountHero(document.getElementById('hero'));
+</script>
+</body>
+</html>

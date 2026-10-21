@@ -1,0 +1,16 @@
+{
+  "updated_at": "2026-10-12",
+  "source": "platform.claude.com/docs/en/about-claude/pricing",
+  "note": "USD per million tokens. Fable 5.1's cache read is 0.025x base, Opus 5.5's and Sonnet 5.5's 0.05x, not 0.1x. Haiku 5.5's row is its tier for prompts up to 100K tokens; a longer prompt costs 5x that, so its estimate errs low. An id no key prefixes takes the default row, Opus 5, so the estimate errs high.",
+  "default": {"input": 5.00, "output": 25.00, "cache_read": 0.50, "cache_write_5m": 6.25, "cache_write_1h": 10.00},
+  "models": {
+    "claude-opus-5-5": {"input": 4.00, "output": 20.00, "cache_read": 0.20, "cache_write_5m": 5.00, "cache_write_1h": 8.00},
+    "claude-opus-5": {"input": 5.00, "output": 25.00, "cache_read": 0.50, "cache_write_5m": 6.25, "cache_write_1h": 10.00},
+    "claude-fable-5-1": {"input": 10.00, "output": 50.00, "cache_read": 0.25, "cache_write_5m": 12.50, "cache_write_1h": 20.00},
+    "claude-fable-5": {"input": 10.00, "output": 50.00, "cache_read": 1.00, "cache_write_5m": 12.50, "cache_write_1h": 20.00},
+    "claude-sonnet-5-5": {"input": 2.00, "output": 10.00, "cache_read": 0.10, "cache_write_5m": 2.50, "cache_write_1h": 4.00},
+    "claude-sonnet-5": {"input": 2.00, "output": 10.00, "cache_read": 0.20, "cache_write_5m": 2.50, "cache_write_1h": 4.00},
+    "claude-haiku-5-5": {"input": 0.10, "output": 0.50, "cache_read": 0.01, "cache_write_5m": 0.125, "cache_write_1h": 0.20},
+    "claude-haiku-4-5": {"input": 1.00, "output": 5.00, "cache_read": 0.10, "cache_write_5m": 1.25, "cache_write_1h": 2.00}
+  }
+}

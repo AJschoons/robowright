@@ -1,0 +1,25 @@
+{
+  "project": "<project>",
+  "repos": [{"name": "<slug>", "path": "~/Dev/<repo>", "origin": "<origin url, or null for a repo with its own .claude/robowright/project.md>"}],
+  "set_at": "<YYYY-MM-DD>",
+  "delegation": "planner",
+  "plan_review": "finish",
+  "models": {
+    "planner": "fable",
+    "lead": "opus",
+    "worker": "opus",
+    "explainer": "opus",
+    "reviewer_code": "opus",
+    "reviewer_prose": "sonnet",
+    "reader": "haiku"
+  },
+  "owner_only": [
+    "the Robowright Session's budget cap, or wall hours past the brief's allowance",
+    "accepting a product-visible behaviour change into the brief",
+    "a schema, persisted-data, public API or protocol change. A new event, state or guard in a `state-machine.json` machine marked `\"enforced\": true` is a protocol change; a machine marked `\"enforced\": false` is a drawing, and not contract",
+    "reversing a settled decision",
+    "anything another person reads"
+  ],
+  "owner_brief": true,
+  "project_report": true
+}

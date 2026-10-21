@@ -1,0 +1,13 @@
+{
+  "name": "robowright-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "python3 -m http.server -d public 8080",
+    "test": "node --test --test-reporter=tap 'tests/*.test.mjs'",
+    "check": "node tools/recorder.mjs --check"
+  },
+  "devDependencies": {
+    "playwright": "1.64.1"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "server": "xcodebuildmcp",
+  "install": "brew install getsentry/xcodebuildmcp/xcodebuildmcp",
+  "command": "xcodebuildmcp",
+  "args": ["mcp"],
+  "env": {
+    "XCODEBUILDMCP_SENTRY_DISABLED": "true"
+  },
+  "version_args": ["--version"],
+  "version_pin": "2.7",
+  "workflows_env": "XCODEBUILDMCP_ENABLED_WORKFLOWS",
+  "workflows": [
+    "coverage",
+    "debugging",
+    "device",
+    "macos",
+    "project-discovery",
+    "project-scaffolding",
+    "simulator",
+    "simulator-management",
+    "swift-package",
+    "ui-automation",
+    "utilities",
+    "xcode-ide"
+  ],
+  "allow": ["mcp__xcodebuildmcp__*"]
+}

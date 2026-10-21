@@ -1,0 +1,216 @@
+/* Cyanotype tokens, verbatim from THEMES in tools/robowright-dash.py. --done-bg is site-only. */
+:root,
+:root[data-theme=whiteprint] {
+  --bg:#F4F7FA;--surface:#FFFFFF;--fg:#12325A;--muted:#52698A;--faint:#7C91AC;--line:#D3DEEA;--track:#DAE4EE;--done:#3E8C83;--run:#3B7CC4;--attn:#D8612E;--attn-text:#B24A1C;--attn-bg:#FCEDE4;--attn-line:#F2D3C2;--idle:#BFCCDB;--brand:#12325A;--brass:#A87300;--grid:#E6EDF4;--note-bg:#FCEDE4;--note-line:#F2D3C2;--note-hover:#F8E2D5;--note-fg:#12325A;--note-muted:#6B5A55;--note-faint:#8F7B73;--note-attn:#B24A1C;--note-run:#3B7CC4;--note-done:#2F7F76;--note-brass:#A87300;
+  --done-bg:#E3F1EE;
+  color-scheme: light;
+}
+
+/* Blueprint --attn-bg is the mockup's #3A3A55: the dashboard's #FCEBDD is 1.49:1 under --attn-text. */
+:root[data-theme=blueprint] {
+  --bg:#123A66;--surface:#164676;--fg:#EAF2FB;--muted:#A9C1DC;--faint:#86A5C8;--line:#2C5A8A;--track:#2A5585;--done:#7FD1B9;--run:#9CCBF2;--attn:#FF9A66;--attn-text:#FFB48C;--attn-bg:#FCEBDD;--attn-line:#EFCDB2;--idle:#46729F;--brand:#FFFFFF;--brass:#F2C14E;--grid:#1B4674;--note-bg:#FCEBDD;--note-line:#EFCDB2;--note-hover:#F7DFCB;--note-fg:#1B2F4A;--note-muted:#6B5A55;--note-faint:#8F7B73;--note-attn:#B04A1C;--note-run:#2F6DB0;--note-done:#2A7A6E;--note-brass:#A87300;
+  --done-bg:#1F5A6A;--attn-bg:#3A3A55;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg:#123A66;--surface:#164676;--fg:#EAF2FB;--muted:#A9C1DC;--faint:#86A5C8;--line:#2C5A8A;--track:#2A5585;--done:#7FD1B9;--run:#9CCBF2;--attn:#FF9A66;--attn-text:#FFB48C;--attn-bg:#FCEBDD;--attn-line:#EFCDB2;--idle:#46729F;--brand:#FFFFFF;--brass:#F2C14E;--grid:#1B4674;--note-bg:#FCEBDD;--note-line:#EFCDB2;--note-hover:#F7DFCB;--note-fg:#1B2F4A;--note-muted:#6B5A55;--note-faint:#8F7B73;--note-attn:#B04A1C;--note-run:#2F6DB0;--note-done:#2A7A6E;--note-brass:#A87300;
+    --done-bg:#1F5A6A;--attn-bg:#3A3A55;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme=night] {
+  --bg:#0B1624;--surface:#111F31;--fg:#D6E2EF;--muted:#8FA3BA;--faint:#6C829B;--line:#1E3048;--track:#1E3048;--done:#5FB8A3;--run:#7BAFE0;--attn:#F08A5D;--attn-text:#F4A07A;--attn-bg:#33231F;--attn-line:#5A3528;--idle:#2E4460;--brand:#BFD6F2;--brass:#F2C14E;--grid:#0F1C2D;--note-bg:#33231F;--note-line:#5A3528;--note-hover:#3C2A25;--note-fg:#EBD9D0;--note-muted:#B89A8E;--note-faint:#957B70;--note-attn:#F4A07A;--note-run:#7BAFE0;--note-done:#5FB8A3;--note-brass:#F2C14E;
+  --done-bg:#13302E;
+  color-scheme: dark;
+}
+
+/* Page */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow-x: clip;
+  transition: background-color .3s, color .3s;
+}
+a { color: inherit; }
+:focus-visible { outline: 3px solid var(--run); outline-offset: 3px; }
+.mono, code, pre { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.wrap { max-width: 960px; margin-inline: auto; padding-inline: 16px; }
+
+.skip {
+  position: absolute; left: 16px; top: -100px; z-index: 10;
+  padding: 8px 14px; border-radius: 9px;
+  background: var(--fg); color: var(--bg); text-decoration: none;
+}
+.skip:focus { top: 12px; }
+
+header.top { display: flex; align-items: center; justify-content: space-between; padding-block: 20px; }
+.mark { width: 32px; height: 32px; display: block; }
+header.top a { font-size: 14px; font-weight: 600; text-decoration: none; }
+header.top a:hover { text-decoration: underline; }
+
+/* Type scale */
+h1 { font-size: clamp(28px, 5vw, 44px); line-height: 1.15; margin: 0 0 14px; letter-spacing: -.01em; }
+h2 { font-size: clamp(22px, 3.2vw, 30px); line-height: 1.2; margin: 0 0 12px; }
+.lede { color: var(--muted); max-width: 56ch; margin: 0; }
+/* Brass fails AA as text, so the eyebrow is muted. */
+.eyebrow { display: block; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-block: 0 12px; }
+
+/* Calls to action */
+.ctas { display: flex; flex-wrap: wrap; gap: 10px; margin: 24px 0 32px; }
+.btn {
+  display: inline-block; padding: 9px 16px; border-radius: 10px;
+  border: 1.5px solid var(--fg); text-decoration: none; font-weight: 600;
+}
+.btn.primary { background: var(--fg); color: var(--bg); }
+
+/* hero.html: the hero alone. 1232 holds a 1200px drawing inside the padding, the share image's width. */
+.hero-sheet { max-width: 1232px; margin-inline: auto; padding-inline: 16px; }
+.hero-sheet svg { width: 100%; height: auto; display: block; }
+
+/* Story: a tall scroller with a sticky stage; no overflow other than clip between them. */
+.story { padding-top: 8vh; }
+.scroller { position: relative; height: 520vh; height: 520svh; }
+.beat-heading { padding-bottom: 4vh; }
+.beat-link { display: inline-block; margin-top: 10px; font-size: 15px; color: var(--fg); font-weight: 600; text-underline-offset: 3px; }
+.stage {
+  position: sticky; top: 0;
+  height: 100vh; height: 100svh;
+  display: flex; flex-direction: column; justify-content: center; gap: 14px;
+  padding-block: 16px;
+  --caption-lines: 3;   /* the most lines any caption takes from 360 px up */
+}
+@media (max-width: 359px) { .stage { --caption-lines: 4; } }
+.stage svg { width: 100%; height: auto; max-height: 68vh; max-height: 68svh; display: block; }
+.caption { height: calc(var(--caption-lines) * 1.55em); flex-shrink: 0; font-size: clamp(16px, 2.2vw, 20px); text-align: center; max-width: 44ch; margin: 0 auto; }   /* 1.55: body's line height */
+.captions { max-width: 60ch; padding-left: calc(16px + 1.4em); }
+.captions li { margin: 0 0 8px; }
+
+/* Landing: the heading and the problem scene. The scroller starts below the viewport's middle at
+   load, so no scene is active and nothing is announced before the reader scrolls. */
+.landing .beat-heading { min-height: calc(62vh - 72px); min-height: calc(62svh - 72px); display: flex; flex-direction: column; justify-content: center; }   /* 72: header.top's height */
+@media (min-width: 760px) {
+  .landing { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); column-gap: 32px; max-width: 960px; margin-inline: auto; padding-inline: 16px; }
+  .landing .wrap { max-width: none; margin-inline: 0; padding-inline: 0; }
+  .landing .beat-heading { position: sticky; top: 0; align-self: start; height: 100vh; height: 100svh; min-height: 0; padding-bottom: 0; }
+  .landing h1 { font-size: clamp(28px, 3vw, 36px); }
+  .landing .scroller { margin-top: 50vh; margin-top: 50svh; }
+  .landing .stage { margin-top: -50vh; margin-top: -50svh; }
+  .landing noscript { grid-column: 1 / -1; }
+  .landing .captions { max-width: 60ch; padding-left: calc(16px + 1.4em); }
+}
+@media (max-width: 759px) {
+  /* the stage rises by the free space above its centred content, so the drawing starts where the heading ends at load; its empty top lets clicks through to the CTAs */
+  .landing .scroller { display: flow-root; }   /* else the stage's negative margin collapses through it and lifts the scroller's top above the middle */
+  .landing .stage {
+    --content: calc(min((100vw - 32px) * 0.6, 68svh) + 2 * 16px + 2 * 14px + var(--caption-lines) * 1.55 * clamp(16px, 2.2vw, 20px) + 40px);   /* svg (problem.js's 480/800 view box) + padding, gaps, caption, controls */
+    margin-top: min(0px, (var(--content) - 100svh) / 2);
+    pointer-events: none;
+  }
+  .landing .stage > * { pointer-events: auto; }
+}
+
+.controls { display: flex; align-items: center; gap: 8px; max-width: 560px; width: 100%; margin: 0 auto; }
+.ctl {
+  flex: none; display: grid; place-items: center; width: 40px; height: 40px; padding: 0;
+  color: var(--fg); background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px; cursor: pointer;
+}
+.ctl:hover { border-color: var(--fg); }
+.ctl svg { width: 18px; height: 18px; fill: currentColor; }
+.controls input[type=range] { flex: 1; min-width: 0; accent-color: var(--fg); }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+
+/* Closing and footer */
+.closing { padding-block: 0 9vh; }
+.closing:last-of-type { padding-bottom: 12vh; }
+.closing p { color: var(--muted); max-width: 60ch; margin: 0 0 14px; }
+.closing a { color: var(--fg); font-weight: 600; text-underline-offset: 3px; }
+/* One line, selected whole on a click, so it copies as one command. */
+pre.install {
+  width: fit-content; max-width: 100%; margin: 16px 0; padding: 14px 16px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--line); color: var(--fg);
+  overflow-x: auto; white-space: pre; font-size: 14px;
+}
+pre.install code { user-select: all; -webkit-user-select: all; }
+.story + .built { padding-top: 14vh; }
+.built + .closing { padding-top: 9vh; }
+.built > p { color: var(--muted); max-width: 60ch; margin: 0 0 24px; }
+.tiles {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;
+  list-style: none; padding: 0; margin: 0;
+}
+.tiles li {
+  display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px;
+}
+.tiles h3 { margin: 0 0 8px; font-size: 16px; font-weight: 600; color: var(--fg); }
+.tiles p { margin: 0 0 12px; font-size: 15px; color: var(--muted); }
+.tiles a { margin-top: auto; color: var(--fg); font-weight: 600; text-underline-offset: 3px; }
+footer {
+  display: flex; align-items: center; gap: 16px;
+  padding-block: 32px 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px;
+}
+footer p { margin: 0; }
+.makers-mark { flex: none; width: 64px; height: 64px; display: block; color: var(--faint); }
+
+/* Drawing classes, shared by the hero and the scenes */
+.ln { fill: none; stroke: var(--fg); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.thin { stroke-width: 2; }
+.faint { stroke: var(--faint); }
+.dash { stroke-dasharray: 8 7; }
+.brass { fill: var(--brass); }
+.brassln { fill: none; stroke: var(--brass); stroke-width: 6.6; stroke-linecap: round; stroke-linejoin: round; }
+.ink { fill: var(--fg); }
+.paper { fill: var(--surface); }
+.bgfill { fill: var(--bg); }
+.gridmin { stroke: var(--grid); stroke-width: 1; }
+.gridmaj { stroke: var(--line); stroke-width: 1.2; }
+.lbl { font: 600 11px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .08em; fill: var(--muted); }
+.stamp text { font: 700 17px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .12em; }
+.stamp-hold rect { fill: var(--attn-bg); stroke: var(--attn); stroke-width: 3; }
+.stamp-hold text { fill: var(--attn-text); }
+.stamp-adv rect { fill: var(--done-bg); stroke: var(--done); stroke-width: 3; }
+.stamp-adv text { fill: var(--done); }
+.donefill { fill: var(--done-bg); }
+.holdfill { fill: var(--attn-bg); }
+.doneln { fill: none; stroke: var(--done); stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
+.attnln { fill: none; stroke: var(--attn); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.lbl.name { font-size: 10px; letter-spacing: .04em; }
+
+/* Hero labels; the narrow rule below grows them for phone width. */
+.hlbl { font: 500 14px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .14em; fill: var(--fg); }
+.hlbl.name { font-size: 13px; letter-spacing: .1em; }
+.badge { font: 600 12px ui-monospace, "SF Mono", Menlo, monospace; fill: var(--fg); }
+.wordmark { font: 600 30px ui-monospace, "SF Mono", Menlo, monospace; fill: var(--fg); }
+.tb { font: 500 11px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .1em; fill: var(--fg); }
+
+/* Pivots: every animated or scaled group sits inside a translate to its pivot, so the pivot is the
+   local origin. fill-box would move it to the corner of the group's bounding box. */
+.eyes, .swing, .ant, .stamp, .grow-narrow { transform-box: view-box; transform-origin: 0 0; }
+
+/* Phone width: the scene's narrow view box adds a row under the ground for the unit names, and
+   labels grow to stay readable at under half scale. The breakpoint is kit.js's narrowScreen. */
+.narrow-only { display: none; }
+@media (max-width: 560px) {
+  .wide-only { display: none; }
+  .narrow-only { display: inline; }
+  .stage .lbl { font-size: 22px; }
+  .stage .grow-narrow .lbl { font-size: 11px; }
+  .grow-narrow { transform: scale(var(--grow, 1.6)); }
+  .hero-sheet .hlbl { font-size: 36px; }
+  .hero-sheet .hlbl.loop { font-size: 34px; }
+  .hero-sheet .hlbl.floor { font-size: 32px; }
+  .key-digit { font-size: 28px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body { transition: none; }
+}

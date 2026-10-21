@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robowright — hand Claude Code a whole stack of changes</title>
+<meta property="og:title" content="Hand Claude Code a whole stack of changes. Come back to finished, reviewed work.">
+<meta property="og:description" content="You're the loop today: review, re-prompt, summarise, start the next session. Robowright writes the loop down and runs it without you.">
+<meta property="og:image" content="https://robowright.dev/share.png">
+<meta property="og:image:alt" content="A blueprint: the Owner and the Robowright crew turning one brief into a three-storey building of work units.">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="kit.css">
+<noscript><style>.scroller { height: auto; } .stage { display: none; }</style></noscript>
+</head>
+<body>
+<a class="skip" href="#decide">Skip the story</a>
+
+<header class="top wrap">
+  <svg class="mark" viewBox="-104 -104 208 208" aria-hidden="true" focusable="false">
+    <circle r="96" class="bgfill" style="stroke:var(--fg);stroke-width:11"/>
+    <g transform="translate(0 14) scale(1.7)">
+      <rect x="-32" y="-22" width="64" height="54" rx="18" class="ln" style="stroke-width:6.2"/>
+      <path d="M0 -22V-37" class="ln" style="stroke-width:6.2"/>
+      <rect x="-4" y="-52" width="8" height="13" rx="1.5" class="brass"/>
+      <ellipse cx="-13" cy="3" rx="6.5" ry="9.5" class="ink"/>
+      <ellipse cx="13" cy="3" rx="6.5" ry="9.5" class="ink"/>
+      <path d="M-35 -10C-39 -10 -40 -8 -40 -4L-40 0C-40 4 -42 5 -46 5C-42 5 -40 6 -40 10L-40 14C-40 18 -39 20 -35 20" class="brassln"/>
+      <path d="M35 -10C39 -10 40 -8 40 -4L40 0C40 4 42 5 46 5C42 5 40 6 40 10L40 14C40 18 39 20 35 20" class="brassln"/>
+    </g>
+  </svg>
+  <a href="https://github.com/AJschoons/robowright">GitHub</a>
+</header>
+
+<main>
+  <section class="landing" aria-labelledby="landing-heading">
+    <div class="beat-heading wrap">
+      <h1 id="landing-heading">Hand Claude Code a whole stack of changes. Come back to finished, reviewed work.</h1>
+      <p class="lede">You're the loop today: review, re-prompt, summarise, start the next session. Robowright writes the loop down and runs it without you.</p>
+      <div class="ctas">
+        <a class="btn primary" href="#story">See how it works</a>
+        <a class="btn" href="https://github.com/AJschoons/robowright">GitHub</a>
+      </div>
+    </div>
+    <div class="scroller" data-scene="problem">
+      <div class="stage wrap">
+        <svg viewBox="0 0 800 480" aria-hidden="true" focusable="false"></svg>
+        <p class="caption"></p>
+      </div>
+    </div>
+    <noscript>
+      <ol class="captions wrap" aria-label="First, the loop you're in today.">
+        <li>Give Claude Code a long task and it ends the same way every time: it's your turn again.</li>
+        <li>Review the work. Pick a cheaper model for the easy parts. Ask for a summary. Start the next session. Enter.</li>
+        <li>Useful work is happening. Your part of it is pressing Enter.</li>
+        <li>What if the loop ran without you, and only the real decisions came back?</li>
+      </ol>
+    </noscript>
+  </section>
+
+  <div class="story" id="story">
+    <p class="eyebrow mono wrap">One project, start to finish</p>
+
+    <section class="beat" aria-labelledby="plan-heading">
+      <div class="beat-heading wrap">
+        <h2 id="plan-heading">It starts as a conversation with one session.</h2>
+        <a class="beat-link" href="https://github.com/AJschoons/robowright/blob/main/skills/planner/SKILL.md">The Planner's handbook →</a>
+      </div>
+      <div class="scroller" data-scene="plan">
+        <div class="stage wrap">
+          <svg viewBox="0 0 800 480" aria-hidden="true" focusable="false"></svg>
+          <p class="caption"></p>
+        </div>
+      </div>
+      <noscript>
+        <ol class="captions wrap">
+          <li>The Owner wants search in the notes app. A Planner session asks the questions first.</li>
+          <li>Scope, three units, and the one call kept for the Owner go on a single brief.</li>
+          <li>The brief is a file. So is every hand-off after it.</li>
+        </ol>
+      </noscript>
+    </section>
+
+    <section class="beat" aria-labelledby="launch-heading">
+      <div class="beat-heading wrap">
+        <h2 id="launch-heading">Then you leave.</h2>
+        <a class="beat-link" href="https://github.com/AJschoons/robowright/blob/main/skills/robowright/STATES.md#robowright-session-lifecycle">How a session is launched →</a>
+      </div>
+      <div class="scroller" data-scene="launch">
+        <div class="stage wrap">
+          <svg viewBox="0 0 800 480" aria-hidden="true" focusable="false"></svg>
+          <p class="caption"></p>
+        </div>
+      </div>
+      <noscript>
+        <ol class="captions wrap">
+          <li>A Lead session takes the brief and starts the first Worker in a worktree of its own.</li>
+          <li>The Owner walks away. The clock starts.</li>
+          <li>From here, everything above the Owner's line is decided and written down without them.</li>
+        </ol>
+      </noscript>
+    </section>
+
+    <section class="beat" aria-labelledby="build-heading">
+      <div class="beat-heading wrap">
+        <h2 id="build-heading">Each unit of work gets a fresh pair of eyes, optimized for the task at hand</h2>
+        <a class="beat-link" href="https://github.com/AJschoons/robowright/blob/main/skills/robowright/DESIGN.md#2-the-context-ceiling">Why a fresh session per unit →</a>
+      </div>
+      <div class="scroller" data-scene="build">
+        <div class="stage wrap">
+          <svg viewBox="0 0 800 480" aria-hidden="true" focusable="false"></svg>
+          <p class="caption"></p>
+        </div>
+      </div>
+      <noscript>
+        <ol class="captions wrap">
+          <li>A Worker builds unit 1, the index. Everything it decides goes in a ledger on disk.</li>
+          <li>Its context is filling up. Instead of compacting, it writes a hand-off and ends its turn, on purpose.</li>
+          <li>A fresh Worker reads the hand-off and picks up where the last one stopped. Nothing is carried but files.</li>
+          <li>Build logs go to a token-efficient Reader, which hands back one line: the verdict. The Worker never reads the log.</li>
+        </ol>
+      </noscript>
+    </section>
+
+    <section class="beat" aria-labelledby="inspection-heading">
+      <div class="beat-heading wrap">
+        <h2 id="inspection-heading">Nothing closes until a fresh pair of eyes signs it off.</h2>
+        <a class="beat-link" href="https://github.com/AJschoons/robowright/blob/main/agents/reviewer-gate.md">The gate review →</a>
+      </div>
+      <div class="scroller" data-scene="inspection">
+        <div class="stage wrap">
+          <svg viewBox="0 0 800 480" aria-hidden="true" focusable="false"></svg>
+          <p class="caption"></p>
+        </div>
+      </div>
+      <noscript>
+        <ol class="captions wrap">
+          <li>A Worker is building unit 2, the search bar. Unit 1, the index, is already signed off.</li>
+          <li>Before unit 2 can close, an adversarial Reviewer that never saw it being written climbs up to inspect it.</li>
+          <li>HOLD. The Worker missed something.</li>
+          <li>One fix, then a fresh inspection.</li>
+          <li>ADVANCE. Unit 2 is signed off, with the finding on file.</li>
+          <li>Only then does unit 3 begin.</li>
+        </ol>
+      </noscript>
+    </section>
+
+    <section class="beat" aria-labelledby="glance-heading">
+      <div class="beat-heading wrap">
+        <h2 id="glance-heading">Meanwhile.</h2>
+      </div>
+      <div class="scroller" data-scene="glance">
+        <div class="stage wrap">
+          <svg viewBox="0 0 800 480" aria-hidden="true" focusable="false"></svg>
+          <p class="caption"></p>
+        </div>
+      </div>
+      <noscript>
+        <ol class="captions wrap">
+          <li>Meanwhile, the Owner is on something else. The dashboard is the only thing to check.</li>
+          <li>Two units signed off, one in progress, nothing waiting on them. Back to work.</li>
+          <li>If the project stops, it says so here.</li>
+        </ol>
+      </noscript>
+    </section>
+
+    <section class="beat" aria-labelledby="door-heading">
+      <div class="beat-heading wrap">
+        <h2 id="door-heading">Some calls are still yours.</h2>
+        <a class="beat-link" href="https://github.com/AJschoons/robowright/blob/main/skills/robowright/STATES.md#who-answers-a-stop">What a stop means →</a>
+      </div>
+      <div class="scroller" data-scene="door">
+        <div class="stage wrap">
+          <svg viewBox="0 0 800 480" aria-hidden="true" focusable="false"></svg>
+          <p class="caption"></p>
+        </div>
+      </div>
+      <noscript>
+        <ol class="captions wrap">
+          <li>Unit 3 reaches a call the brief kept for the Owner: the index format on disk.</li>
+          <li>The Worker stops and writes the question down. It does not guess.</li>
+          <li>The Lead cannot decide it either. It crosses the Owner's line, and the project waits.</li>
+          <li>The answer comes back as a line in a file. The Worker reads it and continues.</li>
+        </ol>
+      </noscript>
+    </section>
+
+    <section class="beat" aria-labelledby="handback-heading">
+      <div class="beat-heading wrap">
+        <h2 id="handback-heading">You come back to finished, reviewed work.</h2>
+        <a class="beat-link" href="https://github.com/AJschoons/robowright/blob/main/skills/explainer/SKILL.md#mode-guide">What the owner reads →</a>
+      </div>
+      <div class="scroller" data-scene="handback">
+        <div class="stage wrap">
+          <svg viewBox="0 0 800 480" aria-hidden="true" focusable="false"></svg>
+          <p class="caption"></p>
+        </div>
+      </div>
+      <noscript>
+        <ol class="captions wrap">
+          <li>Three units, three inspections, one call made by the Owner. The project is done.</li>
+          <li>An Explainer writes the Owner a short brief: what to decide now, what changed, where the detail is.</li>
+          <li>The Owner reads it, reviews code as needed, then accepts. That part is never automated.</li>
+        </ol>
+      </noscript>
+    </section>
+
+    <section class="beat" aria-labelledby="street-heading">
+      <div class="beat-heading wrap">
+        <h2 id="street-heading">The same shape, at any size.</h2>
+      </div>
+      <div class="scroller" data-scene="street">
+        <div class="stage wrap">
+          <svg viewBox="0 0 800 480" aria-hidden="true" focusable="false"></svg>
+          <p class="caption"></p>
+        </div>
+      </div>
+      <noscript>
+        <ol class="captions wrap">
+          <li>This was a small project. The same shape runs at six units, or twelve.</li>
+          <li>Every floor had its own session, its own inspection, and its own files on disk.</li>
+          <li>Hand Claude Code a whole stack of changes. Come back to finished, reviewed work.</li>
+        </ol>
+      </noscript>
+    </section>
+  </div>
+
+  <section class="built wrap" id="built-in" aria-labelledby="built-heading">
+    <h2 id="built-heading">What's built in</h2>
+    <p>Robowright is the workflows I kept reaching for, written down once as skills and agents, and built around putting the expensive model only where a request carries real judgment. The habits are best practice in AI-assisted engineering, wired in rather than recommended; what's built in is the plumbing between them, so the rest runs without me. Each tile names the file that carries it.</p>
+    <ul class="tiles" role="list">
+      <li>
+        <h3>The words are settled before the plan, and the plan before the build.</h3>
+        <p>The domain model is settled first, then the plan is grilled in rounds, each question carrying a recommended answer. Units are cut as tracer bullets, and skills and work orders are written for their reader.</p>
+        <a href="https://github.com/AJschoons/robowright/blob/main/skills/planner/SKILL.md">The Planner's handbook →</a>
+      </li>
+      <li>
+        <h3>Small context, by construction.</h3>
+        <p>A long run is made of short sessions, one role each, the window capped, since a session's cost is mostly re-reading its own context. Hand-offs are files, so by default each unit restarts fresh from disk.</p>
+        <a href="https://github.com/AJschoons/robowright/blob/main/skills/robowright/DESIGN.md#2-the-context-ceiling">The design notes →</a>
+      </li>
+      <li>
+        <h3>Big things go through a Reader.</h3>
+        <p>A build log, a ledger, an accessibility tree: a small Haiku reader returns the one line the caller needs, and the Worker's context never carries the rest.</p>
+        <a href="https://github.com/AJschoons/robowright/blob/main/agents/log-reader.md">The Reader →</a>
+      </li>
+      <li>
+        <h3>Modes for spend, speed and certainty.</h3>
+        <p>Three profiles trade token spend and speed against certainty. The default puts bounded units on Sonnet and judgment on Opus; a brief can move any unit, and an Opus reviewer gates every one whichever model built it.</p>
+        <a href="https://github.com/AJschoons/robowright/blob/main/skills/planner/SKILL.md#run-profile--one-field-per-brief">The run profiles →</a>
+      </li>
+      <li>
+        <h3>The grader is never the author.</h3>
+        <p>A Reviewer that never saw the work built judges the artifact and the evidence, never the builder's account. Each unit is held or advanced on a citation, and the whole stack gets an adversarial review before you see it.</p>
+        <a href="https://github.com/AJschoons/robowright/blob/main/agents/reviewer-gate.md">The gate review →</a>
+      </li>
+      <li>
+        <h3>Tests are proven able to fail.</h3>
+        <p>A behaviour change is specified before it is built by someone who reads the contract, not the code, and existing untested logic is characterised before it moves. Every new test is killed by a mutation or declared a guard.</p>
+        <a href="https://github.com/AJschoons/robowright/blob/main/skills/load-bearing-tests/SKILL.md">Load-bearing tests →</a>
+      </li>
+      <li>
+        <h3>It stops for seven named reasons and logs the rest.</h3>
+        <p>A fixed list of decisions is yours alone; a brief can add to it, never take from it. Outside the seven stop reasons, a run takes the defensible default and logs it as assumed.</p>
+        <a href="https://github.com/AJschoons/robowright/blob/main/skills/robowright/STATES.md#stop-codes">The stop codes →</a>
+      </li>
+      <li>
+        <h3>Every document is checked before you read it.</h3>
+        <p>A fresh reader cites or downgrades every load-bearing claim in a change description, a handoff and your owner brief; a document with an open question is not published. The comments a change adds get a pass of their own.</p>
+        <a href="https://github.com/AJschoons/robowright/blob/main/skills/doc-gate/SKILL.md">The doc gate →</a>
+      </li>
+      <li>
+        <h3>The record is written to be read later.</h3>
+        <p>A change description in the form the project asks for, a decision log that keeps the rejected options, an owner brief assembled from the files, a project report at the end.</p>
+        <a href="https://github.com/AJschoons/robowright/blob/main/skills/explainer/SKILL.md">The Explainer →</a>
+      </li>
+    </ul>
+  </section>
+
+  <section class="closing wrap" id="decide" aria-labelledby="decide-heading" tabindex="-1">
+    <h2 id="decide-heading">What you still decide</h2>
+    <p>Robowright stops and asks when a decision is yours: anything that ships to users, a schema or a public interface, a new dependency, spending past the budget, anything another person reads. Everything below that line it decides itself and writes down. You read the brief, and you accept or replan.</p>
+  </section>
+
+  <section class="closing wrap" aria-labelledby="isnt-heading">
+    <h2 id="isnt-heading">What it isn't</h2>
+    <p>It's beta: the workflows I kept reaching for, written down as skills and agents. It runs on macOS, inside Claude Code, for one engineer. It isn't a hosted service, a team tool or a CI system.</p>
+  </section>
+
+  <section class="closing wrap" aria-labelledby="why-heading">
+    <h2 id="why-heading">Why I built it</h2>
+    <p>Every long task I gave Claude Code ended the same way: I was the loop. Review the work, pick a cheaper model for the easy parts, ask for a summary, start the next session. Useful work was happening, and my part of it was mechanical.</p>
+    <p>So I wrote the loop down as the next layer up. Plan thoroughly with one session. Let the rest run without me, each change checked by a reviewer that never saw it being built. Be interrupted only for the decisions that are actually mine. Get a brief at the end that I can disagree with.</p>
+    <p>When speed or a single thing matters most, a frontier model in a dedicated session still wins. Robowright is for everything beyond that: the second project, the backgrounded one, the stack of changes that runs overnight. It hands you finished work to review and critique, and keeps your judgment for the calls that are yours.</p>
+  </section>
+
+  <section class="closing wrap" id="try" aria-labelledby="try-heading">
+    <h2 id="try-heading">Try it</h2>
+    <p>Clone it into a folder no Claude Code session is granted, run the installer, and read "The crew" in the README. Then hand it something small.</p>
+    <pre class="install"><code>git clone https://github.com/AJschoons/robowright.git ~/src/robowright &amp;&amp; bash ~/src/robowright/install.sh</code></pre>
+    <p><a href="https://github.com/AJschoons/robowright#readme">Read the README on GitHub →</a></p>
+  </section>
+</main>
+
+<footer class="wrap">
+  <svg class="makers-mark" viewBox="-104 -104 208 208" aria-hidden="true" focusable="false">
+  <circle r="100" fill="none" stroke="currentColor" stroke-width="3.2"/>
+  <circle r="84" fill="none" stroke="currentColor" stroke-width="2.6"/>
+  <path d="M-49.4 -76.5 -48.3 -77.2 -44.5 -74.9 -43 -75.8 -47.1 -78.1C-46 -79 -45.9 -80.3 -46.7 -81.6C-47.7 -83.1 -49.2 -83.5 -50.7 -82.5L-53.8 -80.6L-48.7 -72.3L-47.3 -73.1ZM-50.1 -77.5 -51.8 -80.3 -50.2 -81.3C-49.4 -81.8 -48.8 -81.7 -48.3 -81L-48 -80.4C-47.5 -79.7 -47.7 -79.1 -48.5 -78.5Z M-36.5 -78.9C-34.3 -79.9 -34.1 -82.1 -35.4 -85C-36.7 -87.9 -38.5 -89.1 -40.8 -88.1C-43 -87 -43.2 -84.9 -41.9 -82C-40.6 -79.1 -38.8 -77.8 -36.5 -78.9ZM-37.1 -80.1C-38.3 -79.5 -39.3 -80.3 -40 -81.9L-40.7 -83.4C-41.5 -85 -41.5 -86.3 -40.2 -86.9C-39 -87.5 -38 -86.7 -37.3 -85L-36.6 -83.5C-35.8 -81.9 -35.8 -80.7 -37.1 -80.1Z M-29.4 -82 -25.9 -83.2C-24.3 -83.7 -23.6 -85.1 -24.1 -86.6C-24.5 -87.9 -25.4 -88.4 -26.6 -88.3L-26.6 -88.3C-25.8 -88.9 -25.4 -89.7 -25.8 -90.8C-26.2 -92.3 -27.5 -92.9 -29.2 -92.4L-32.4 -91.3ZM-28.3 -83.6 -29.3 -86.7 -27.7 -87.2C-26.7 -87.6 -26 -87.3 -25.7 -86.4L-25.6 -86C-25.3 -85.1 -25.7 -84.5 -26.7 -84.2ZM-29.7 -87.8 -30.6 -90.7 -29.2 -91.1C-28.2 -91.4 -27.6 -91.2 -27.3 -90.4L-27.2 -89.9C-26.9 -89.1 -27.3 -88.6 -28.2 -88.3Z M-16.1 -85.4C-13.6 -85.9 -12.9 -87.9 -13.5 -91.1C-14.1 -94.2 -15.5 -95.8 -17.9 -95.4C-20.4 -94.9 -21.1 -92.9 -20.5 -89.7C-19.9 -86.6 -18.5 -85 -16.1 -85.4ZM-16.3 -86.7C-17.7 -86.5 -18.4 -87.5 -18.7 -89.2L-19 -90.9C-19.4 -92.6 -19.1 -93.8 -17.7 -94.1C-16.3 -94.3 -15.6 -93.3 -15.3 -91.6L-15 -90C-14.6 -88.2 -14.9 -87 -16.3 -86.7Z M-6.4 -86.9 -5.8 -92.6 -5.7 -92.6 -4.3 -87 -2.2 -87.1 -2.2 -96.9 -3.5 -96.8 -3.5 -91.1 -3.5 -88.6 -3.6 -88.6 -5.1 -94.4 -6.6 -94.3 -7.3 -88.4 -7.5 -88.4 -7.8 -90.9 -8.5 -96.5 -9.8 -96.4 -8.5 -86.7Z M4.2 -91 5.5 -90.9 7.3 -86.8 9 -86.7 7 -90.9C8.4 -91.1 9.2 -92.1 9.3 -93.5C9.4 -95.4 8.5 -96.5 6.6 -96.6L3 -96.9L2.4 -87.1L3.9 -87ZM4.2 -92.2 4.5 -95.5 6.3 -95.4C7.3 -95.3 7.7 -94.8 7.7 -93.9L7.7 -93.3C7.6 -92.4 7.1 -92 6.1 -92.1Z M19.1 -85 19.3 -86.2 17.1 -86.6 18.5 -93.9 20.7 -93.5 20.9 -94.6 14.9 -95.8 14.7 -94.6 16.9 -94.2 15.5 -86.9 13.3 -87.3 13.1 -86.2Z M28.3 -82.4 29.6 -82 31.2 -86.7 28 -87.7 27.7 -86.6 29.5 -86 29.2 -85.2C28.9 -84.2 28 -83.7 26.9 -84C25.6 -84.4 25.5 -85.8 26 -87.5L26.5 -89C27.1 -90.7 27.9 -91.6 29.2 -91.2C30.3 -90.8 30.4 -90 30.4 -89.1L31.9 -89.1C32 -90.5 31.4 -91.8 29.6 -92.4C27.3 -93.1 25.7 -91.8 24.6 -88.6C23.7 -85.6 24.1 -83.6 26 -82.9C27.3 -82.5 28.1 -83.1 28.6 -83.7L28.7 -83.7Z M38.1 -78.4 39.5 -77.7 43.6 -86.6 42.2 -87.2 40.4 -83.4 37.5 -84.8 39.2 -88.6 37.8 -89.2 33.7 -80.4 35.1 -79.7 36.9 -83.6 39.9 -82.3Z M53.8 -79 54.5 -80.2 48 -84.2 47.3 -83.1 49.9 -81.5 45.4 -74.3 46.8 -73.5 51.2 -80.7Z M-43.3 86.7 -42.7 85.6 -46.7 83.4 -45.3 80.8 -41.4 82.9 -40.8 81.7 -44.7 79.6 -43.3 77.1 -39.3 79.3 -38.7 78.1 -44.1 75.2 -48.7 83.8Z M-35.3 90.4C-33.2 91.2 -31.6 90.6 -30.9 88.9C-30.4 87.6 -30.8 86.4 -32.3 85.4L-33.2 84.9C-34.2 84.3 -34.5 83.7 -34.2 83C-33.8 82.1 -33.1 81.8 -32 82.3C-31 82.7 -30.5 83.3 -30.2 84.1L-29 83.6C-29.3 82.5 -30.1 81.6 -31.5 81C-33.5 80.3 -35 80.8 -35.7 82.5C-36.2 83.7 -35.9 84.9 -34.3 85.9L-33.4 86.4C-32.4 87.1 -32.1 87.6 -32.4 88.4C-32.8 89.4 -33.7 89.7 -34.8 89.2C-35.8 88.8 -36.4 88.1 -36.8 87.1L-38.1 87.6C-37.7 88.8 -36.9 89.8 -35.3 90.4Z M-18 86.7 -17.6 85.4 -25.1 83.5 -25.4 84.8 -22.5 85.5 -24.5 93.7 -23 94.1 -20.9 85.9Z M-12 96.3C-11.1 96.4 -10.7 96 -10.7 95.5L-10.6 95.1C-10.6 94.6 -10.8 94.1 -11.7 94C-12.6 93.9 -13 94.3 -13 94.8L-13.1 95.2C-13.1 95.7 -12.9 96.2 -12 96.3Z M15.2 94.4 10.2 95 12.3 92.8C13.5 91.5 14.4 90.3 14.2 88.8C14 87.1 12.7 86.1 10.7 86.3C8.7 86.5 7.9 87.8 7.6 89.1L9 89.4C9.2 88.5 9.7 87.8 10.7 87.7C11.8 87.5 12.4 88 12.6 89L12.6 89.2C12.7 90.1 12.2 90.9 11.3 91.9L8.5 95.1L8.7 96.6L15.4 95.7Z M23.8 94.1C26.2 93.5 26.8 91.4 26 88.3C25.3 85.2 23.7 83.7 21.3 84.3C18.9 84.9 18.3 87 19.1 90.1C19.9 93.2 21.4 94.7 23.8 94.1ZM23.5 92.9C22.1 93.2 21.3 92.2 20.9 90.5L20.5 88.9C20 87.1 20.3 85.9 21.6 85.6C23 85.2 23.8 86.2 24.3 87.9L24.7 89.5C25.1 91.3 24.9 92.5 23.5 92.9ZM22.8 90C23.4 89.8 23.5 89.5 23.5 89.1L23.4 88.8C23.3 88.5 23 88.2 22.4 88.4C21.7 88.6 21.6 88.9 21.7 89.3L21.8 89.6C21.9 89.9 22.1 90.2 22.8 90Z M37.9 87.8 33.2 89.6 34.7 86.9C35.6 85.4 36.1 84 35.5 82.6C34.9 81 33.4 80.3 31.5 81C29.7 81.8 29.2 83.2 29.2 84.5L30.7 84.5C30.6 83.5 30.9 82.7 31.9 82.4C32.9 82 33.6 82.3 34 83.2L34.1 83.4C34.4 84.2 34.1 85.2 33.5 86.3L31.6 90.1L32.1 91.5L38.4 89Z M46.2 85.4C48 84.4 48.6 82.5 47.7 80.8C46.8 79.2 45.1 78.7 43.7 79.5C42.6 80.1 42.3 81 42.3 81.9L42.2 81.9C41.6 79.8 42.1 78.1 43.4 75.6L41.5 76.6C40.6 78.3 40 81.2 41.3 83.7C42.4 85.7 44.3 86.4 46.2 85.4ZM45.6 84.3C44.5 84.8 43.6 84.6 43.1 83.5L43 83.4C42.4 82.4 42.7 81.5 43.8 80.9C44.8 80.3 45.7 80.6 46.3 81.6L46.4 81.8C46.9 82.8 46.6 83.7 45.6 84.3Z" fill="currentColor"/>
+  <circle cx="-92" cy="0" r="2.2" fill="currentColor"/>
+  <circle cx="92" cy="0" r="2.2" fill="currentColor"/>
+  <g transform="translate(0 0) scale(1)">
+    <rect x="-32" y="-22" width="64" height="54" rx="18" fill="none" stroke="currentColor" stroke-width="3.2"/>
+    <path d="M0 -22V-37" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+    <rect x="-4" y="-52" width="8" height="13" rx="1.5" style="fill:var(--brass)"/>
+    <ellipse cx="-13" cy="3" rx="6.5" ry="9.5" fill="currentColor"/>
+    <ellipse cx="13" cy="3" rx="6.5" ry="9.5" fill="currentColor"/>
+    <path d="M-35 -10C-39 -10 -40 -8 -40 -4L-40 0C-40 4 -42 5 -46 5C-42 5 -40 6 -40 10L-40 14C-40 18 -39 20 -35 20" fill="none" style="stroke:var(--brass)" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M35 -10C39 -10 40 -8 40 -4L40 0C40 4 42 5 46 5C42 5 40 6 40 10L40 14C40 18 39 20 35 20" fill="none" style="stroke:var(--brass)" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  </svg>
+  <p>Built by Adam Schoonmaker, with Robowright. The drawings are of an invented project; nothing here is from a real run.</p>
+</footer>
+
+<script type="module">
+  import { mountScene } from './kit.js';
+  import plan from './scenes/plan.js';
+  import launch from './scenes/launch.js';
+  import build from './scenes/build.js';
+  import inspection from './scenes/inspection.js';
+  import glance from './scenes/glance.js';
+  import door from './scenes/door.js';
+  import handback from './scenes/handback.js';
+  import street from './scenes/street.js';
+  import problem from './scenes/problem.js';
+  mountScene(document.querySelector('[data-scene="plan"]'), plan);
+  mountScene(document.querySelector('[data-scene="launch"]'), launch);
+  mountScene(document.querySelector('[data-scene="build"]'), build);
+  mountScene(document.querySelector('[data-scene="inspection"]'), inspection);
+  mountScene(document.querySelector('[data-scene="glance"]'), glance);
+  mountScene(document.querySelector('[data-scene="door"]'), door);
+  mountScene(document.querySelector('[data-scene="handback"]'), handback);
+  mountScene(document.querySelector('[data-scene="street"]'), street);
+  // last: the recorder visits scenes in mount order, so it reaches the problem scene from the street's theme
+  mountScene(document.querySelector('[data-scene="problem"]'), problem);
+</script>
+</body>
+</html>

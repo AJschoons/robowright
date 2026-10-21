@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""
+usage-guard — the plan-usage enforcement: at the ceiling, write STOP into every Robowright Session
+that is still running or resumable, so each one stops at its next step (stop_reason `owner-stop`).
+
+It reads usage through `claude-usage` (its sibling in this directory) and acts only on a fresh
+reading: stale or missing data writes nothing and prints a warning, because a reading from before
+a reset would stop live work for nothing. A session is skipped when its run.json says `phase:
+done`, or when it has no readable run.json. An existing STOP is never overwritten — the Owner's
+reason, or an earlier trip's, stands.
+
+The STOP file is one line naming the window, its percentage, and its reset time; the Lead quotes
+it.
+
+The sessions root is --runs-root (repeatable), else $ROBOWRIGHT_SESSIONS_ROOT, else `sessions_root`
+in ~/.claude/robowright/launch.json; with none of them the guard refuses by name, exits 2, and
+writes nothing.
+
+Exit codes (--once): 0 under · 1 at or over (STOP written or already present) · 2 no sessions
+root · 3 stale · 4 missing — the same as `claude-usage --check`, plus 2.
+
+Usage:
+    usage-guard --once                    # check once at the default 90%
+    usage-guard --watch 60                # every 60 seconds, until killed
+    usage-guard --threshold 85 --watch 60
+"""
+
+import argparse
+import glob
+import json
+import os
+import subprocess
+import sys
+import time
+from datetime import datetime
+
+READER = os.path.join(os.path.dirname(os.path.realpath(__file__)), "claude-usage")
+LAUNCH_JSON = os.path.expanduser("~/.claude/robowright/launch.json")
+DEFAULT_THRESHOLD = 90.0
+OK, OVER, NO_ROOT, STALE, MISSING = 0, 1, 2, 3, 4
+
+
+def launch_sessions_root():
+    """launch.json's sessions_root, read as spend-guard.py reads it: (root, None), or (None, why not)."""
+    if not os.path.exists(LAUNCH_JSON):
+        return None, "no such file"
+    try:
+        with open(LAUNCH_JSON) as f:
+            settings = json.load(f)
+    except (OSError, ValueError) as e:
+        return None, f"unreadable: {e}"
+    if not isinstance(settings, dict):
+        return None, "not a JSON object"
+    root = settings.get("sessions_root")
+    if not (isinstance(root, str) and root):
+        return None, "sessions_root is missing, empty or not a string"
+    if root.startswith("~/"):
+        return os.path.expanduser("~") + root[1:], None
+    return root, None
+
+
+def sessions_roots(flag_roots):
+    """--runs-root, else $ROBOWRIGHT_SESSIONS_ROOT, else launch.json's sessions_root; None, with the refusal on stderr, when none names one."""
+    if flag_roots:
+        return [os.path.expanduser(root) for root in flag_roots]
+    env_root = os.environ.get("ROBOWRIGHT_SESSIONS_ROOT")
+    if env_root:
+        return [os.path.expanduser(env_root)]
+    root, why = launch_sessions_root()
+    if root:
+        return [root]
+    print(f"usage-guard: no sessions root: set sessions_root in {LAUNCH_JSON} ({why}), "
+          "or set $ROBOWRIGHT_SESSIONS_ROOT, or pass --runs-root", file=sys.stderr)
+    return None
+
+
+def usage(threshold, max_age):
+    result = subprocess.run(
+        [sys.executable, READER, "--json", "--check", str(threshold), "--max-age", str(max_age)],
+        capture_output=True, text=True,
+    )
+    return json.loads(result.stdout)
+
+
+def open_sessions(roots):
+    run_jsons = sorted(path for root in roots for path in glob.glob(os.path.join(root, "*", "run.json")))
+    for run_json in run_jsons:
+        try:
+            with open(run_json) as f:
+                phase = json.load(f).get("phase")
+        except (OSError, ValueError, AttributeError):
+            continue
+        if phase != "done":
+            yield os.path.dirname(run_json)
+
+
+def stop_line(report):
+    parts = []
+    for key in report["over"]:
+        w = report["windows"][key]
+        parts.append(f"{key} at {w['used_percentage']}% (resets {w['resets_local']})")
+    stamp = f"{datetime.now().astimezone():%Y-%m-%d %H:%M %Z}"
+    return f"usage-guard: {'; '.join(parts)} >= {report['threshold']:g}% threshold, at {stamp}\n"
+
+
+def write_stops(report, roots):
+    line = stop_line(report)
+    for session in open_sessions(roots):
+        try:
+            with open(os.path.join(session, "STOP"), "x") as f:
+                f.write(line)
+        except FileExistsError:
+            print(f"{os.path.basename(session)}: STOP already present", flush=True)
+            continue
+        print(f"{os.path.basename(session)}: STOP written — {line.strip()}", flush=True)
+
+
+def tick(threshold, max_age, roots):
+    report = usage(threshold, max_age)
+    state = report["state"]
+    if state == "missing":
+        print(f"warning: usage reading missing ({report['path']}); nothing written", flush=True)
+        return MISSING
+    if state == "stale":
+        print(f"warning: usage reading stale (age {report['age_seconds']}s, or no current window); "
+              "nothing written", flush=True)
+        return STALE
+    if state == "over":
+        write_stops(report, roots)
+        return OVER
+    summary = ", ".join(f"{k} {w['used_percentage']}%" for k, w in report["windows"].items())
+    print(f"under {threshold:g}%: {summary}", flush=True)
+    return OK
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    mode = ap.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--once", action="store_true")
+    mode.add_argument("--watch", type=float, metavar="SECONDS")
+    ap.add_argument("--threshold", type=float, default=DEFAULT_THRESHOLD, metavar="PCT")
+    ap.add_argument("--max-age", type=float, default=15, metavar="MINUTES",
+                    help="minutes before a reading is stale (default 15)")
+    ap.add_argument("--runs-root", action="append", metavar="DIR",
+                    help="repeatable; default $ROBOWRIGHT_SESSIONS_ROOT, else sessions_root in launch.json")
+    args = ap.parse_args()
+
+    roots = sessions_roots(args.runs_root)
+    if roots is None:
+        return NO_ROOT
+    if args.once:
+        return tick(args.threshold, args.max_age, roots)
+    while True:
+        tick(args.threshold, args.max_age, roots)
+        time.sleep(args.watch)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

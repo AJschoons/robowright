@@ -1,0 +1,465 @@
+{
+  "schema": 1,
+  "_doc": "The one definition of state in Robowright. scripts/session-state.py enforces the machines marked enforced; STATES.md is generated from every machine here. Edit this file, then run `session-state.py doc --write`.",
+
+  "stop_codes": {
+    "one-way-door": "a decision the brief's authority section puts above the Worker",
+    "verification-failed": "a unit's gate failed max_gate_attempts times, or the end-of-stack review held max_gate_attempts times, or no device and no fallback",
+    "behavior-change": "a product-visible behavior change found inside a refactor or coverage unit",
+    "base-moved": "base SHA is no longer an ancestor, or another session touched the worktree",
+    "budget": "max_wall_hours exceeded, or the profile's budget gate tripped",
+    "owner-stop": "<session_dir>/STOP exists",
+    "rebrief": "the finish review said the stack does not do what the plan says; never resumed, a rebrief Planner answers it"
+  },
+
+  "delegation": {
+    "levels": ["owner", "lead", "planner"],
+    "lead_may_decide_at": ["lead", "planner"],
+    "owner_only_codes": ["owner-stop"],
+    "rebrief_after_stops": 3
+  },
+
+  "universal_guards": {
+    "_doc": "Checked on every event, before the transition's own guards (the last one after its effect).",
+    "stored-state-legal": "run.json holds none of the illegal stored states below",
+    "log-intact": "the guarded fields still match the newest event in events.jsonl: a hand edit is never laundered by the next legal event. Only adopt re-baselines. (A rebrief ignores the unit rows and the models, which the Planner re-cuts, and checks done-units-untouched instead.)",
+    "from-state": "the event is legal from the current state, per the transition table",
+    "unit-known": "--unit names a unit run.json has",
+    "result-legal": "the state the event would write is itself legal; otherwise nothing is written"
+  },
+
+  "illegal_states": {
+    "_doc": "Combinations run.json can hold and the machine cannot produce. The tool refuses every event while one holds, a launcher refuses the session, and the roster prints invalid:<name>.",
+    "unknown-phase": "phase is not one of the seven the table knows",
+    "stopped-without-code": "phase is stopped and stop_reason has no code: a stop nobody can route",
+    "unknown-stop-code": "stop_reason.code is not one of the stop codes",
+    "done-and-stopped": "phase is done and stop_reason is set",
+    "parked-and-stopped": "phase is parked and stop_reason is set: park always clears it",
+    "done-and-rotating": "phase is done and a rotation is pending",
+    "stopped-and-rotating": "stop_reason is set and a rotation is pending: the Stop hook, the launcher and the Lead would each read it differently",
+    "bad-publish": "publish is not one of the four publish strategies, false, null, or the record publishing wrote",
+    "unknown-unit-status": "a unit's status is not todo, building, held, gated or done",
+    "duplicate-unit-id": "two units share an id",
+    "two-units-in-flight": "more than one unit is building, held or gated",
+    "unit-out-of-order": "a unit is done after one that is not",
+    "bad-gate-attempts": "a unit's gate_attempts is not a whole number",
+    "gate-attempts-over-cap": "a unit's gate_attempts exceeds max_gate_attempts",
+    "units-started-before-implement": "a unit has left todo while the session is in preflight or intake",
+    "units-open-after-implement": "a unit is not done while the session is in end-of-stack or done",
+    "implementing-without-units": "phase is implement and there are no units",
+    "rotating-mid-unit": "a rotation is pending while a unit is in flight"
+  },
+
+  "operations": {
+    "_doc": "What a launcher may do to a Robowright Session, by stored state. `session-state.py check-op` answers these. A stopped session is not resumable until its decision is recorded: whoever decided applies the resume event first, then the session is woken or relaunched.",
+    "launch": ["briefed", "intake"],
+    "rotate": ["awaiting-rotation"],
+    "resume": ["briefed", "intake", "implementing", "end-of-stack"]
+  },
+
+  "doc": {
+    "title": "Robowright: states and transitions",
+    "intro": [
+      "Robowright is a set of small state machines that hand work to each other through files. This document draws the whole system first, as the map, then models each machine on its own. It is generated from `state-machine.json`, the same table `scripts/session-state.py` enforces, so a diagram here cannot drift from what the tool allows.",
+      "**Two kinds of machine.** Two are *enforced*: the Robowright Session lifecycle and the unit gate loop. Their state is stored in `run.json`, several programs have to agree on it (the launcher, the Stop hook, the roster, every role), and an illegal value costs hours: a session that is both stopped and rotating, a unit closed without a gate verdict. Those fields have one writer, `session-state.py`, and every change is one named event checked against this table. The rest are *documented*: their state lives in handbooks, ledgers and review files, one role walks each of them, and writing them down is what keeps the roles' handbooks consistent.",
+      "**Liveness is not a state.** Whether a process is running, quiet, stalled or gone is an observation about this Mac at this minute. It is derived on every tick and never stored, so a laptop that sleeps cannot make `run.json` wrong. The roster verdict below is a classifier over stored state plus that observation.",
+      "**It is a statechart, not a flat machine.** The unit loop runs inside `implementing`. The four working states form one composite, because `stop` leaves from any of them and `resume` returns to whichever one it left (recorded as `stop_reason.phase_before`).",
+      "**How to read a diagram.** A rounded box is a state; an arrow is an event, labelled with its name. A box around several states means an arrow touching the box applies to every state inside it. Each enforced machine is followed by its transition table: the event, where it is legal, who applies it, the guards checked on disk first, what it writes, and the handbook step it comes from."
+    ],
+    "usage": [
+      "```\nsession-state.py <session_dir> status            what state is this, what may happen next\nsession-state.py <session_dir> <event> [options] apply one transition, or be refused with the rule\nsession-state.py <session_dir> check             exit 1 when the stored state is illegal or was edited by hand\nsession-state.py <session_dir> check-op <op>     what the launcher asks before launch, rotate or resume\nsession-state.py <session_dir> adopt --by owner --reason <text>   baseline a session the tool did not write\nsession-state.py doc --write                     regenerate this file\n```",
+      "Every applied event appends one line to `<session_dir>/events.jsonl`: the event, who, from, to, its arguments, and a digest of the guarded fields. Every refusal is appended too, with the guard that failed, because an agent asking for an illegal transition is a signal the Lead should see. `check` compares the digest of the newest applied event with `run.json` as it is now, so a guarded field edited by hand shows up as `edited-outside-tool` and the roster prints `invalid`.",
+      "`run.json` keeps its shape. The tool adds two keys inside `stop_reason` (`at`, `phase_before`), three unit statuses between `todo` and `done` (`building`, `held`, `gated`), the `parked` phase with its `parked` record, and nothing else, so a reader written before it still reads every file it writes. A stop code beside a working phase, which older sessions wrote, is read as `stopped` and never written.",
+      "To change the machine: edit `state-machine.json`, give any new guard or event its function in `session-state.py` (the tool refuses to run while the two disagree), run `scripts/test_session_state.py`, then `session-state.py doc --write`."
+    ]
+  },
+
+  "machines": [
+    {
+      "id": "session",
+      "title": "Robowright Session lifecycle",
+      "kind": "statechart",
+      "enforced": true,
+      "stored_in": "run.json: phase, stop_reason, rotate, rebriefs",
+      "summary": "One brief run to completion. The only machine whose states a launcher, a hook and a roster all have to agree on.",
+      "initial": "briefed",
+      "terminal": ["done", "parked"],
+      "groups": [
+        { "id": "working", "title": "working: the Stop hook blocks the turn from ending", "states": ["briefed", "intake", "implementing", "end-of-stack"] }
+      ],
+      "states": [
+        { "id": "briefed", "phase": "preflight", "encoding": "phase = preflight", "stop_gate": "block", "meaning": "The Planner wrote BRIEF.md and run.json. Nothing has started, or preflight is still running." },
+        { "id": "intake", "phase": "intake", "encoding": "phase = intake", "stop_gate": "block", "meaning": "Preflight passed. The Worker is verifying the brief's claims and populating units." },
+        { "id": "implementing", "phase": "implement", "encoding": "phase = implement", "stop_gate": "block", "meaning": "The unit loop. Exactly zero or one unit is in flight; the unit machine runs inside this state." },
+        { "id": "awaiting-rotation", "encoding": "rotate.requested_at set, rotate.resumed_at empty; phase keeps the working phase", "stop_gate": "release", "meaning": "The session ended its turn on purpose so a fresh one can start. Idle by design: it will not restart itself." },
+        { "id": "end-of-stack", "phase": "end-of-stack", "encoding": "phase = end-of-stack", "stop_gate": "block", "meaning": "Every unit is done. Whole-change review, comment pass, smoke, sweep, description, publish." },
+        { "id": "stopped", "phase": "stopped", "encoding": "phase = stopped and stop_reason = {code, detail, at, phase_before}", "stop_gate": "release", "meaning": "The stop contract fired. Addressed to the Lead. Resumable: not terminal." },
+        { "id": "done", "phase": "done", "encoding": "phase = done", "stop_gate": "release", "meaning": "Handoff written. The Lead's intake takes over." },
+        { "id": "parked", "phase": "parked", "encoding": "phase = parked and parked = {by, reason, at, from, released}", "stop_gate": "release", "meaning": "The Owner said leave it. No event leaves this state." }
+      ],
+      "transitions": [
+        { "event": "preflight-pass", "from": ["briefed"], "to": "intake", "actor": "Worker", "guards": ["brief-exists"], "effect": "phase = intake", "source": "`worker` Phase 0 step 10" },
+        { "event": "intake-complete", "from": ["intake"], "to": "implementing", "actor": "Worker", "guards": ["units-populated"], "effect": "phase = implement", "source": "`worker` Phase 1" },
+        { "event": "request-rotate", "from": ["implementing"], "to": "awaiting-rotation", "actor": "Worker", "guards": ["rotation-enabled", "no-unit-in-flight", "a-unit-is-done", "a-unit-is-todo"], "effect": "rotate = {requested_at, next_unit, resumed_at: null}", "source": "`worker` Phase 2 step 9" },
+        { "event": "rotation-resumed", "from": ["awaiting-rotation"], "to": "@stored-phase", "to_group": "working", "actor": "Worker", "guards": [], "effect": "rotate.resumed_at = now", "source": "`worker` Phase 0 step 1" },
+        { "event": "begin-end-of-stack", "from": ["implementing"], "to": "end-of-stack", "actor": "Worker", "guards": ["all-units-done"], "effect": "phase = end-of-stack", "source": "`worker` Phase 3" },
+        { "event": "plan-review", "from": ["implementing", "end-of-stack"], "to": "@same-state", "to_group": "working", "actor": "Worker", "guards": ["plan-review-on", "plan-review-file-has-verdict"], "effect": "plan_reviews += {n, at, verdict, unit, path}; the state is unchanged. From implementing it needs --unit (plan_review per-unit)", "source": "`worker` Phase 4 finish review; Phase 2 step 8 when per-unit" },
+        { "event": "finish", "from": ["end-of-stack"], "to": "done", "actor": "Worker", "guards": ["end-of-stack-review-exists", "end-of-stack-review-says-advance", "handoff-exists", "handback-exists", "plan-review-settled"], "effect": "phase = done", "source": "`worker` Phase 4" },
+        { "event": "stop", "from": ["briefed", "intake", "implementing", "awaiting-rotation", "end-of-stack"], "to": "stopped", "actor": "Worker", "guards": ["stop-code-known", "stop-detail-given", "stop-file-present-for-owner-stop"], "effect": "stop_reason = {code, detail, at, phase_before}; phase = stopped; a pending rotation is consumed", "source": "`worker` rule 2" },
+        { "event": "resume", "from": ["stopped"], "to": "@phase-before", "to_group": "working", "actor": "Lead or Owner", "guards": ["stop-file-absent", "decision-given", "decider-allowed", "not-rebrief-due-for-lead", "wall-extension-allowed"], "effect": "stop_reason = null; phase = phase_before; after a verification-failed stop the unit in flight gets gate_attempts 0, a fresh budget for the decided route; with --wall-hours h, max_wall_hours = h and the event record carries wall_hours [from, h]", "source": "`lead` stopped:<code>; applied by whoever decided, before the session is woken" },
+        { "event": "park", "from": ["briefed", "done", "stopped"], "to": "parked", "actor": "Owner", "guards": ["park-is-owner", "park-reason-given"], "effect": "each lock in locks whose owner is this session dir is removed; parked = {by, reason, at, from, released}; stop_reason = null; phase = parked", "source": "`OWNERS-GUIDE` Parking a session" },
+        { "event": "accept", "from": ["done"], "to": "done", "actor": "Owner", "guards": ["head-given"], "effect": "accepted = {sha: --head, at}; phase stays done", "source": "`lead/scripts/accept.sh`, after main fast-forwards to the squash" },
+        { "event": "rebase", "from": ["implementing", "end-of-stack"], "to": "@same-state", "to_group": "working", "actor": "Worker", "guards": ["decision-given", "decider-allowed", "base-given", "head-given"], "effect": "base_sha = --base; rebases += {n, at, from, to, tip, by, decision}; each --unit-heads pair rewrites that done unit's head; the state is unchanged", "source": "`worker` rule 2, after a Lead or Owner decision on record; `lead` base-moved" },
+        { "event": "rebrief", "from": ["stopped"], "to": "awaiting-rotation", "actor": "Planner", "guards": ["rebrief-file-has-verdict", "superseded-brief-kept", "done-units-untouched"], "effect": "every unit that is not done returns to todo with gate_attempts 0 (the Planner may have re-cut them); rebriefs += {n, at, by, verdict, why, stop_code}; stop_reason = null; phase = phase_before; rotate = {requested_at, next_unit, resumed_at: null, reason: rebrief}", "source": "`planner` Rebrief session; `lead` stopped, third time" }
+      ]
+    },
+
+    {
+      "id": "unit",
+      "title": "Unit gate loop",
+      "kind": "statechart",
+      "enforced": true,
+      "stored_in": "run.json: units[i].status, gate_attempts, head, gate.review",
+      "summary": "One reviewable change. Runs inside the session's implementing state, one unit at a time, in order.",
+      "initial": "todo",
+      "terminal": ["done"],
+      "states": [
+        { "id": "todo", "encoding": "status = todo", "meaning": "Not started. Every earlier unit must be done first." },
+        { "id": "building", "encoding": "status = building", "meaning": "Branch, implement, build, scoped tests, kind checks. No gate verdict yet for the current attempt." },
+        { "id": "held", "encoding": "status = held", "meaning": "The last gate review said HOLD. Triage, one fix commit, re-run, re-gate. At max_gate_attempts the only exit is the session's stop." },
+        { "id": "gated", "encoding": "status = gated", "meaning": "The last gate review said ADVANCE. Only the close-out remains: whole-suite run if owed, the one run.json write, the ledger entry, HANDOFF.md." },
+        { "id": "done", "encoding": "status = done", "meaning": "Closed. head is recorded. Never revisited." }
+      ],
+      "transitions": [
+        { "event": "unit-start", "from": ["todo"], "to": "building", "actor": "Worker", "guards": ["session-is-implementing", "predecessors-done"], "effect": "status = building", "source": "`worker` Phase 2 step 1" },
+        { "event": "gate-hold", "from": ["building", "held"], "to": "held", "actor": "Worker", "guards": ["session-is-implementing", "gate-attempts-under-cap", "gate-review-is-fresh", "gate-review-says-hold"], "effect": "status = held; gate_attempts += 1; gate.review = path", "source": "`worker` Phase 2 steps 6-7" },
+        { "event": "gate-advance", "from": ["building", "held"], "to": "gated", "actor": "Worker", "guards": ["session-is-implementing", "gate-attempts-under-cap", "gate-review-is-fresh", "gate-review-says-advance"], "effect": "status = gated; gate_attempts += 1; gate.review = path", "source": "`worker` Phase 2 step 6" },
+        { "event": "unit-close", "from": ["gated"], "to": "done", "actor": "Worker", "guards": ["session-is-implementing", "gate-review-says-advance", "head-given"], "effect": "status = done; head = <sha>", "source": "`worker` Phase 2 step 8" }
+      ]
+    },
+
+    {
+      "id": "liveness",
+      "title": "Roster verdict",
+      "kind": "classifier",
+      "enforced": false,
+      "stored_in": "nothing: derived every tick from run.json, the STOP file and the Claude session registry",
+      "enforcement": "computed by `lead/scripts/run-roster.py`, which takes the stored state and its problems from `session-state.py` and adds liveness",
+      "summary": "What the Lead sees. Liveness is an observation about a process, so it is an input to the Lead and never a stored state: a Mac that sleeps must not be able to make run.json wrong.",
+      "rules": [
+        { "if": "stored state is illegal", "then": "invalid:<why>" },
+        { "if": "state = done", "then": "done" },
+        { "if": "state = stopped", "then": "stopped:<code>" },
+        { "if": "state = parked", "then": "parked" },
+        { "if": "<session_dir>/STOP exists", "then": "stopping" },
+        { "if": "state = awaiting-rotation", "then": "rotating" },
+        { "if": "state = briefed and nothing launched it: no registered Claude session, no session_id or transcripts, no started_at, no event (session-state.py never_launched)", "then": "briefed" },
+        { "if": "no registered Claude session for the worktree", "then": "orphaned" },
+        { "if": "the session's registry status is busy, shell or waiting", "then": "running" },
+        { "if": "otherwise", "then": "stalled" }
+      ],
+      "flags": [
+        { "id": "edited-outside-tool", "when": "a guarded field in run.json no longer matches the newest event in events.jsonl: someone wrote it by hand. The launcher refuses the session until it is put back or adopted" },
+        { "id": "corrupt-event-log", "when": "a line of events.jsonl after the newest event is not an event (a half-written append); adopt re-baselines" },
+        { "id": "no-event-log", "when": "the session is past briefed and has no events.jsonl: it predates the tool, or was written around it" },
+        { "id": "quiet <age>", "when": "running and updated_at has not moved in two hours" },
+        { "id": "over-wall", "when": "running, stalled, stopping or rotating past max_wall_hours" },
+        { "id": "over-threshold / over-cap", "when": "only where the profile's budget is in dollars" },
+        { "id": "dialog", "when": "running and the registry status is waiting: held on a permission, input or sandbox dialog only the Owner can answer" },
+        { "id": "registry <value>", "when": "stalled and the registry status is not idle: a status the roster does not know, or none" }
+      ]
+    },
+
+    {
+      "id": "stop-routing",
+      "title": "Who answers a stop",
+      "kind": "statechart",
+      "enforced": false,
+      "stored_in": "LEDGER.md and DECISIONS.md entries; the resume transition enforces the hard rows",
+      "summary": "The stop contract from the Lead's side. A stop is never addressed to the Owner directly; the Lead routes it.",
+      "initial": "stop-seen",
+      "terminal": ["resumed", "rebrief-started"],
+      "states": [
+        { "id": "stop-seen", "meaning": "The roster shows stopped:<code>. The Lead reads stop_reason.detail, the ledger entry and HANDOFF.md open items." },
+        { "id": "lead-decides", "meaning": "An execution-level call a commit on the same branch can undo before publish. Recorded before the resume, with the alternative and what would make it wrong." },
+        { "id": "owner-decides", "meaning": "Anything on the floor: the budget cap, wall hours past the allowance, a product-visible change, schema or public API, reversing a settled decision, anything another person reads, plus the profile's Owner-only floor. Brought as one message: options, downstream cost, recommendation." },
+        { "id": "decision-recorded", "meaning": "A Decided entry in LEDGER.md naming who decided, a DECISIONS.md entry, and the resume event applied with --by and --decision: the session is no longer stopped." },
+        { "id": "resumed", "meaning": "The Worker is awake in the phase it left and continues from HANDOFF.md FIRST ACTION." },
+        { "id": "rebrief-started", "meaning": "Handed to the rebrief machine." }
+      ],
+      "transitions": [
+        { "event": "third stop of any kind, a rebrief stop, or a verification-failed fix needs a unit redesigned", "from": ["stop-seen"], "to": "rebrief-started" },
+        { "event": "code is owner-stop, or delegation is owner", "from": ["stop-seen"], "to": "owner-decides" },
+        { "event": "delegation is lead or planner, and the chosen option is reversible before publish", "from": ["stop-seen"], "to": "lead-decides" },
+        { "event": "the call is on the floor", "from": ["stop-seen", "lead-decides"], "to": "owner-decides" },
+        { "event": "Decided (Lead) written", "from": ["lead-decides"], "to": "decision-recorded" },
+        { "event": "the Owner answers", "from": ["owner-decides"], "to": "decision-recorded" },
+        { "event": "delivered: SendMessage when the session is alive, the launcher's resume when it is gone; STOP deleted first", "from": ["decision-recorded"], "to": "resumed" }
+      ]
+    },
+
+    {
+      "id": "rebrief",
+      "title": "Rebrief",
+      "kind": "statechart",
+      "enforced": false,
+      "stored_in": "REBRIEF.md, BRIEF.r<n>.md, run.json.rebriefs; the rebrief transition enforces the file guards",
+      "summary": "Three stops is a brief problem, not three hard decisions.",
+      "initial": "planner-rebriefing",
+      "terminal": ["rotation-launched", "owners"],
+      "states": [
+        { "id": "planner-rebriefing", "meaning": "A fresh Planner reads the plan and, through a Reviewer, the session's record. It rewrites BRIEF.md in place, keeps the old one as BRIEF.r<n>.md, writes REBRIEF.md with a verdict, and applies the rebrief event." },
+        { "id": "verdict-read", "meaning": "The Lead reads REBRIEF.md's verdict line only." },
+        { "id": "owner-asked", "meaning": "The Owner gets REBRIEF.md's question with the launch line." },
+        { "id": "rotation-launched", "meaning": "The rebriefed Robowright Session starts as a rotation: it reads the Rebrief section first, then FIRST ACTION." },
+        { "id": "owners", "meaning": "A rebriefed Robowright Session that stops three more times belongs to the Owner, whatever the level." }
+      ],
+      "transitions": [
+        { "event": "the Planner session ends", "from": ["planner-rebriefing"], "to": "verdict-read" },
+        { "event": "confident, delegation is planner, and this is the first rebrief", "from": ["verdict-read"], "to": "rotation-launched" },
+        { "event": "verdict is owner, or delegation is lead, or this is a second rebrief", "from": ["verdict-read"], "to": "owner-asked" },
+        { "event": "the Owner says yes", "from": ["owner-asked"], "to": "rotation-launched" },
+        { "event": "three more stops", "from": ["rotation-launched"], "to": "owners" }
+      ]
+    },
+
+    {
+      "id": "context",
+      "title": "Rotation and compaction",
+      "kind": "statechart",
+      "enforced": false,
+      "stored_in": "rotate in run.json for rotation; nothing for compaction, which the harness does on its own",
+      "summary": "Two ways a Robowright Session sheds context at a unit boundary. Rotation restarts at the fixed context floor; compaction lands above it and is lossy.",
+      "initial": "unit-closed",
+      "terminal": [],
+      "states": [
+        { "id": "unit-closed", "meaning": "Everything the unit produced is in files. The context that produced it is dead weight for the next unit." },
+        { "id": "awaiting-rotation", "meaning": "rotate_sessions is true: the Worker applied request-rotate and ended the turn; the Stop hook released on that field." },
+        { "id": "old-session-stopped", "meaning": "The Lead stopped the previous session the way the profile's Launch section says. Its conversation is kept." },
+        { "id": "fresh-session-preflight", "meaning": "The launcher's rotate path started a new session with the same fixed prompt. It runs preflight steps 2-9, then applies rotation-resumed." },
+        { "id": "next-unit", "meaning": "Work continues from HANDOFF.md FIRST ACTION." },
+        { "id": "window-filling", "meaning": "rotate_sessions is false: the same session continues; the launcher's compaction override keeps the window small." },
+        { "id": "compacted", "meaning": "The PreCompact hook told the summarizer what to keep; the SessionStart hook re-injected the session pointer. The Worker re-reads run.json, HANDOFF.md and its non-negotiables before acting." }
+      ],
+      "transitions": [
+        { "event": "request-rotate", "from": ["unit-closed"], "to": "awaiting-rotation" },
+        { "event": "the Lead's tick sees rotating", "from": ["awaiting-rotation"], "to": "old-session-stopped" },
+        { "event": "launcher rotate", "from": ["old-session-stopped"], "to": "fresh-session-preflight" },
+        { "event": "rotation-resumed", "from": ["fresh-session-preflight"], "to": "next-unit" },
+        { "event": "rotate_sessions is false", "from": ["unit-closed"], "to": "window-filling" },
+        { "event": "the harness compacts", "from": ["window-filling"], "to": "compacted" },
+        { "event": "rule 1 re-read done", "from": ["compacted"], "to": "next-unit" },
+        { "event": "the window never filled", "from": ["window-filling"], "to": "next-unit" }
+      ]
+    },
+
+    {
+      "id": "lead-tick",
+      "title": "The Lead's tick",
+      "kind": "statechart",
+      "enforced": false,
+      "stored_in": "$TMPDIR/roster-state.json between ticks; nothing else, the roster is re-derived from disk every time",
+      "summary": "One pass of the watch. At most one action per Robowright Session per tick.",
+      "initial": "budget-read",
+      "terminal": ["ended"],
+      "states": [
+        { "id": "budget-read", "meaning": "Whatever the profile's Budget section names as the enforcement: started on the first tick, read on every tick and before every launch." },
+        { "id": "roster-read", "meaning": "One run-roster.py call with --since and --tail. Only rows that moved print." },
+        { "id": "acting", "meaning": "Per verdict: nothing for running, except a dialog flag, reported to the Owner once per appearance with claude attach and never nudged; stop routing for stopped; a registry <value> flag on stalled is a finding for the Owner, never a nudge; otherwise one nudge for stalled, and a second stall after a nudge is a finding for the Owner, never a second nudge; the rotation for rotating; listing it, and nothing else, for briefed; a check of ListAgents, then the resume line, for orphaned; intake for done; for invalid:<why> or a tamper flag, read status and the tail of events.jsonl and bring it to the Owner as a finding." },
+        { "id": "armed", "meaning": "notify_when_idle on every running session in registry busy without a live subscription, its status read from one plain run-roster.py call while any is unarmed; none on shell or dialog, since one armed in shell fires at once." },
+        { "id": "duties-run", "meaning": "Every duty the profile, then the project hook, lists for lead.tick, in order." },
+        { "id": "reported", "meaning": "decision-reporting shape; a noop when nothing changed." },
+        { "id": "sleeping", "meaning": "ScheduleWakeup 1200-1800s while anything is running, 1800-3000s while a stop or a stall is waiting on the Owner; woken early by an idle notice." },
+        { "id": "ended", "meaning": "Nothing is running and nothing is owed." }
+      ],
+      "transitions": [
+        { "event": "usage is under the profile's thresholds", "from": ["budget-read"], "to": "roster-read" },
+        { "event": "rows moved", "from": ["roster-read"], "to": "acting" },
+        { "event": "no change, a running session is unarmed", "from": ["roster-read"], "to": "armed" },
+        { "event": "no change since last tick", "from": ["roster-read"], "to": "reported" },
+        { "event": "one action per session taken", "from": ["acting"], "to": "armed" },
+        { "event": "", "from": ["armed"], "to": "duties-run" },
+        { "event": "", "from": ["duties-run"], "to": "reported" },
+        { "event": "anything is still running", "from": ["reported"], "to": "sleeping" },
+        { "event": "nothing is running", "from": ["reported"], "to": "ended" },
+        { "event": "wake-up or idle notice", "from": ["sleeping"], "to": "budget-read" }
+      ]
+    },
+
+    {
+      "id": "intake",
+      "title": "Intake, after done",
+      "kind": "statechart",
+      "enforced": false,
+      "stored_in": "INTAKE.md, PLAN-REVIEW.md, the owner brief, DECISIONS.md, PROJECT.md",
+      "summary": "A finished Robowright Session has moved the ground under the plan. Nothing new is briefed until the plan has caught up.",
+      "initial": "session-done",
+      "terminal": ["next-brief-written", "project-closed"],
+      "states": [
+        { "id": "session-done", "meaning": "The roster shows done. HANDBACK.md exists." },
+        { "id": "plan-reviewed", "meaning": "Unless run.json.plan_review is off: the session's finish review, run through planner-review before finish, left PLAN-REVIEW.md saying ship, or polish that the session applied and gated. A rebrief verdict never reaches done: it stops the session." },
+        { "id": "intake-written", "meaning": "reviewer-intake read the session's record, not the Lead's reasoning, and wrote INTAKE.md in eight sections; lead.intake duties run." },
+        { "id": "plan-corrected", "meaning": "PROJECT.md and the exploration docs corrected outside the Resolved Decisions table; DECISIONS.md entry including Rejected; a Lead recommendation appended to PLAN-REVIEW.md (to INTAKE.md when plan_review is off) for every INTAKE.md ask it has none for." },
+        { "id": "brief-written", "meaning": "Only when robowright.json.owner_brief is true and the session published: an Explainer wrote the owner brief from the record, never the diff." },
+        { "id": "reported-to-owner", "meaning": "doc-gate on everything that reaches the Owner, then the decision review at the top: every (Lead) and (Planner) decision, ranked by confidence, each with what would make it wrong." },
+        { "id": "next-brief-written", "meaning": "A fresh, short Planner session wrote the next BRIEF.md and run.json. The Lead never writes a brief. The new Robowright Session is briefed." },
+        { "id": "project-closed", "meaning": "PROJECT.md's Task Breakdown has no open rows; the Explainer's report, if asked for; the Planner's closing checklist to the Owner." }
+      ],
+      "transitions": [
+        { "event": "plan_review is not off", "from": ["session-done"], "to": "plan-reviewed" },
+        { "event": "spawn reviewer-intake", "from": ["plan-reviewed"], "to": "intake-written" },
+        { "event": "plan_review is off: spawn reviewer-intake", "from": ["session-done"], "to": "intake-written" },
+        { "event": "corrections and Owner asks written", "from": ["intake-written"], "to": "plan-corrected" },
+        { "event": "owner_brief is on and the session published", "from": ["plan-corrected"], "to": "brief-written" },
+        { "event": "owner_brief is off", "from": ["plan-corrected"], "to": "reported-to-owner" },
+        { "event": "", "from": ["brief-written"], "to": "reported-to-owner" },
+        { "event": "open rows remain", "from": ["reported-to-owner"], "to": "next-brief-written" },
+        { "event": "no open rows", "from": ["reported-to-owner"], "to": "project-closed" }
+      ]
+    },
+
+    {
+      "id": "device-lock",
+      "title": "Machine-wide locks",
+      "kind": "statechart",
+      "enforced": false,
+      "stored_in": "<sessions root>/.<name>-lock/owner; the names are run.json.locks[], each defined by a platform plugin's §6",
+      "enforcement": "the launcher refuses to start a second holder of any listed name; taking, releasing and clearing a stale lock are the Worker's, per the project hook; `session-state.py park` removes the parked session's own",
+      "summary": "One holder per lock name at a time on this machine. The launcher only refuses a second holder of any listed name; the Worker takes and releases.",
+      "initial": "free",
+      "terminal": [],
+      "states": [
+        { "id": "free", "meaning": "The lock directory does not exist." },
+        { "id": "held", "meaning": "The directory exists and owner names a live Robowright Session." },
+        { "id": "stale", "meaning": "The directory exists and its owner is not live, or names no owner. The one failure that blocks every later session." }
+      ],
+      "transitions": [
+        { "event": "a claimant's mkdir without -p succeeds, owner written", "from": ["free"], "to": "held" },
+        { "event": "released at handoff, including an early stop or a failure", "from": ["held"], "to": "free" },
+        { "event": "the holder died", "from": ["held"], "to": "stale" },
+        { "event": "released at park: the Owner parked the session owner names", "from": ["held", "stale"], "to": "free" },
+        { "event": "the next claimant clears it and records whose it was", "from": ["stale"], "to": "held" },
+        { "event": "no owner named: cleared by hand, never by a script", "from": ["stale"], "to": "free" }
+      ]
+    },
+
+    {
+      "id": "publish-accept",
+      "title": "Publish and accept",
+      "kind": "statechart",
+      "enforced": false,
+      "stored_in": "what run.json records that publishing produced; DECISIONS.md for accepted or rejected, per change kind",
+      "summary": "What published means is the project hook's, named by its publish strategy. Every change is reviewed before the Owner sees it, and only the Owner accepts it into local main.",
+      "initial": "unpublished",
+      "terminal": ["accepted", "rejected"],
+      "states": [
+        { "id": "unpublished", "meaning": "The brief's publish is `false`, or resolves to no strategy, or end-of-stack has not reached step 7." },
+        { "id": "published", "meaning": "Exactly what the project hook's Publishing section says and nothing beyond it." },
+        { "id": "in-owner-review", "meaning": "The Owner reads the owner brief, then the work. lead.post-publish duties run here." },
+        { "id": "feedback-briefed", "meaning": "Feedback that means a code change becomes one Robowright Session per review round, briefed by a Planner. The Lead never commits it." },
+        { "id": "accepted", "meaning": "The Owner accepted it, and it is integrated into local main." },
+        { "id": "rejected", "meaning": "Recorded per change kind, so a kind can later earn auto-accept on its measured rejection rate." }
+      ],
+      "transitions": [
+        { "event": "Worker Phase 3 step 7, only if publish resolves to a strategy", "from": ["unpublished"], "to": "published" },
+        { "event": "the intake is reported to the Owner", "from": ["published"], "to": "in-owner-review" },
+        { "event": "feedback needs code", "from": ["in-owner-review"], "to": "feedback-briefed" },
+        { "event": "the feedback session is done", "from": ["feedback-briefed"], "to": "in-owner-review" },
+        { "event": "Accept it", "from": ["in-owner-review"], "to": "accepted" },
+        { "event": "the Owner rejects it", "from": ["in-owner-review"], "to": "rejected" }
+      ]
+    },
+
+    {
+      "id": "system",
+      "title": "The whole system",
+      "kind": "statechart",
+      "diagram": "flowchart",
+      "enforced": false,
+      "stored_in": "nowhere of its own: each state is one of the machines modelled after it",
+      "summary": "One unit of work, from the plan to local main and back to the plan.",
+      "initial": "planned",
+      "terminal": ["accepted", "rejected"],
+      "groups": [
+        { "id": "working", "title": "Robowright Session, working (enforced: session-state.py)", "states": ["briefed", "intake", "implementing", "end-of-stack"] },
+        { "id": "turn-ended", "title": "Robowright Session, turn ended (enforced)", "states": ["awaiting-rotation", "stopped"] },
+        { "id": "leads-work", "title": "The Lead, between sessions", "states": ["stop-routed", "rebriefing", "intake-running"] },
+        { "id": "owners-work", "title": "The Owner", "states": ["in-owner-review"] }
+      ],
+      "states": [
+        { "id": "planned", "meaning": "A row in PROJECT.md's Task Breakdown. The Planner's phases 1-5." },
+        { "id": "briefed", "meaning": "session: briefed. Launch is gated by the budget read and any device lock." },
+        { "id": "intake", "meaning": "session: intake." },
+        { "id": "implementing", "meaning": "session: implementing, with the unit machine inside it." },
+        { "id": "awaiting-rotation", "meaning": "session: awaiting-rotation. See Rotation and compaction." },
+        { "id": "end-of-stack", "meaning": "session: end-of-stack." },
+        { "id": "stopped", "meaning": "session: stopped." },
+        { "id": "stop-routed", "meaning": "Who answers a stop." },
+        { "id": "rebriefing", "meaning": "Rebrief." },
+        { "id": "done", "meaning": "session: done." },
+        { "id": "intake-running", "meaning": "Intake, after done." },
+        { "id": "in-owner-review", "meaning": "Publish and accept." },
+        { "id": "accepted", "meaning": "On local main. The plan's row closes." },
+        { "id": "rejected", "meaning": "Recorded; the plan's row stays open or is dropped by the Owner." }
+      ],
+      "transitions": [
+        { "event": "Planner brief", "from": ["planned"], "to": "briefed" },
+        { "event": "launch, then preflight-pass", "from": ["briefed"], "to": "intake" },
+        { "event": "intake-complete", "from": ["intake"], "to": "implementing" },
+        { "event": "request-rotate", "from": ["implementing"], "to": "awaiting-rotation" },
+        { "event": "launcher rotate, then rotation-resumed", "from": ["awaiting-rotation"], "to": "implementing" },
+        { "event": "begin-end-of-stack", "from": ["implementing"], "to": "end-of-stack" },
+        { "event": "stop", "from": ["working", "awaiting-rotation"], "to": "stopped" },
+        { "event": "the Lead's tick", "from": ["stopped"], "to": "stop-routed" },
+        { "event": "resume, to the working state it left", "from": ["stop-routed"], "to": "working" },
+        { "event": "third stop, or a rebrief stop", "from": ["stop-routed"], "to": "rebriefing" },
+        { "event": "rebrief", "from": ["rebriefing"], "to": "awaiting-rotation" },
+        { "event": "finish", "from": ["end-of-stack"], "to": "done" },
+        { "event": "the Lead's tick", "from": ["done"], "to": "intake-running" },
+        { "event": "the intake is reported, and the session published", "from": ["intake-running"], "to": "in-owner-review" },
+        { "event": "next brief", "from": ["intake-running"], "to": "planned" },
+        { "event": "feedback or polish brief", "from": ["in-owner-review"], "to": "planned" },
+        { "event": "Accept it", "from": ["in-owner-review"], "to": "accepted" },
+        { "event": "the Owner rejects it", "from": ["in-owner-review"], "to": "rejected" }
+      ]
+    }
+  ],
+
+  "guards": {
+    "brief-exists": "<session_dir>/BRIEF.md exists",
+    "units-populated": "run.json.units is non-empty and every unit has an id (a duplicate id or a started unit is already an illegal stored state)",
+    "rotation-enabled": "run.json.rotate_sessions is true",
+    "no-unit-in-flight": "no unit is building, held or gated",
+    "a-unit-is-done": "at least one unit is done: a rotation happens at a unit boundary",
+    "a-unit-is-todo": "at least one unit is todo: the last unit goes on to end-of-stack in the same session",
+    "all-units-done": "every unit is done",
+    "end-of-stack-review-exists": "<session_dir>/reviews/end-of-stack.md exists",
+    "end-of-stack-review-says-advance": "<session_dir>/reviews/end-of-stack.md exists and its verdict is ADVANCE: a HOLD is fixed and re-reviewed, never finished on",
+    "handoff-exists": "<session_dir>/HANDOFF.md exists",
+    "handback-exists": "<session_dir>/HANDBACK.md exists",
+    "plan-review-on": "run.json.plan_review is finish or per-unit (a run.json without the key, or with null, reads as finish); any other value, a non-string included, refuses",
+    "plan-review-file-has-verdict": "<session_dir>/PLAN-REVIEW.md exists and its first Verdict: line (backticks and * stripped) says the --verdict word (ship, polish or rebrief); from implementing, --unit names the unit reviewed",
+    "plan-review-settled": "run.json.plan_review is off; or the newest finish review (plan_reviews entry with no unit) says ship, or says polish and reviews/polish-gate.md says ADVANCE and is no older than that review. None yet, rebrief, or a plan_review value but finish, per-unit or off (a missing key or null reads as finish) refuses",
+    "stop-code-known": "the code is one of stop_codes",
+    "stop-detail-given": "--detail is not empty: the Lead reads it before anything else",
+    "stop-file-present-for-owner-stop": "owner-stop is only legal while <session_dir>/STOP exists",
+    "stop-file-absent": "<session_dir>/STOP is gone, or the Robowright Session stops again at once",
+    "decision-given": "--decision is not empty: a resume or rebase with no recorded decision is not a decision",
+    "decider-allowed": "--by owner always; --by lead only when run.json.delegation is lead or planner and, for a resume, the stop code is not Owner-only",
+    "not-rebrief-due-for-lead": "--by lead is refused on the third stop since the last rebrief: that is a rebrief, or the Owner's call",
+    "wall-extension-allowed": "--wall-hours h only on a budget stop, finite and above the stored max_wall_hours; --by lead also at most max_wall_hours × (1 + wall_hours_extension_pct / 100), and only once: an applied lead resume carrying wall_hours uses it up. Without --wall-hours it passes",
+    "rebrief-file-has-verdict": "<session_dir>/REBRIEF.md exists and its first Verdict: line (backticks and * stripped) says the --verdict word (confident or owner)",
+    "superseded-brief-kept": "<session_dir>/BRIEF.r<n>.md exists for this rebrief number",
+    "done-units-untouched": "the done units are exactly the ones the last event recorded, same ids and heads: a rebrief re-cuts only what is not done",
+    "session-is-implementing": "the session state is implementing",
+    "predecessors-done": "every unit before this one is done: units run in order, so at most one is ever in flight",
+    "gate-attempts-under-cap": "gate_attempts is below max_gate_attempts; at the cap the only exit is stop verification-failed",
+    "gate-review-is-fresh": "the gate review file was written after this unit's previous gate event: one review buys one verdict",
+    "gate-review-says-hold": "<session_dir>/reviews/<unit>-gate.md exists and its verdict is HOLD",
+    "gate-review-says-advance": "<session_dir>/reviews/<unit>-gate.md exists and its verdict is ADVANCE: the grader is never the author",
+    "head-given": "--head is a commit SHA (7-40 hex characters) and, when run.json.worktree exists, names a commit there; so is every --unit-heads SHA, each naming a done unit",
+    "base-given": "--base is a commit SHA in run.json.worktree and an ancestor of the worktree's HEAD",
+    "park-is-owner": "--by owner: parking is the Owner's alone",
+    "park-reason-given": "--reason is given and not empty"
+  }
+}

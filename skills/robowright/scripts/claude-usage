@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""
+claude-usage — plan usage (5-hour and 7-day windows) from the status-line tap's last reading.
+
+The reading is $CLAUDE_USAGE_DIR/latest.json (default ~/.claude/usage), written by
+usage-tap.py, beside this script, whenever any Claude Code session gets an API response. It is only as
+new as the last response in any session: `age` says how old, and anything older than --max-age
+is stale — never reported as under a threshold.
+
+A window whose reset time has passed since the reading has reset; it is shown and not counted.
+A reading with no window left is stale.
+
+Exit codes:
+    0  ok       fresh, and under --check when given
+    1  over     fresh, and some window at or above --check
+    2  usage    bad arguments
+    3  stale    older than --max-age, or no window still current
+    4  missing  no reading, or one that cannot be parsed
+
+Usage:
+    claude-usage                    # each window's %, local reset time, and the reading's age
+    claude-usage --check 90         # exit 1 when any window is at or above 90%
+    claude-usage --json             # the same, for scripts
+    claude-usage --max-age 30       # minutes before a reading is stale (default 15)
+"""
+
+import argparse
+import json
+import os
+import sys
+import time
+from datetime import datetime
+
+OK, OVER, STALE, MISSING = 0, 1, 3, 4
+WINDOWS = ("five_hour", "seven_day")
+DEFAULT_MAX_AGE_MINUTES = 15
+
+
+def latest_path():
+    root = os.path.expanduser(os.environ.get("CLAUDE_USAGE_DIR") or "~/.claude/usage")
+    return os.path.join(root, "latest.json")
+
+
+def local_time(epoch):
+    return datetime.fromtimestamp(epoch).astimezone().strftime("%Y-%m-%d %H:%M %Z")
+
+
+def read(path):
+    try:
+        with open(path) as f:
+            reading = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(reading, dict) or not isinstance(reading.get("captured_at"), (int, float)):
+        return None
+    return reading
+
+
+def assess(reading, now, max_age_seconds, threshold):
+    """The report: state, age, each window, and which windows are at or over `threshold`."""
+    if reading is None:
+        return {"state": "missing", "path": latest_path(), "windows": {}}
+    age = now - reading["captured_at"]
+    windows = {}
+    for key in WINDOWS:
+        window = reading.get(key)
+        if not isinstance(window, dict) or not isinstance(window.get("used_percentage"), (int, float)):
+            continue
+        resets_at = window.get("resets_at")
+        has_reset = isinstance(resets_at, (int, float)) and resets_at <= now
+        windows[key] = {
+            "used_percentage": window["used_percentage"],
+            "resets_at": resets_at,
+            "resets_local": local_time(resets_at) if isinstance(resets_at, (int, float)) else None,
+            "has_reset": has_reset,
+        }
+    current = {k: w for k, w in windows.items() if not w["has_reset"]}
+    over = sorted(k for k, w in current.items()
+                  if threshold is not None and w["used_percentage"] >= threshold)
+    if age > max_age_seconds or not current:
+        state = "stale"
+    elif over:
+        state = "over"
+    else:
+        state = "ok"
+    return {
+        "state": state,
+        "captured_at": reading["captured_at"],
+        "age_seconds": int(age),
+        "max_age_seconds": max_age_seconds,
+        "threshold": threshold,
+        "over": over,
+        "session_id": reading.get("session_id"),
+        "windows": windows,
+    }
+
+
+def describe_age(seconds):
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    return f"{seconds // 3600}h{(seconds % 3600) // 60:02d}m"
+
+
+def text(report):
+    if report["state"] == "missing":
+        return f"missing: no usage reading at {report['path']} — the status-line tap has not run"
+    lines = []
+    for key, w in report["windows"].items():
+        reset = f"reset at {w['resets_local']}" if w["has_reset"] else f"resets {w['resets_local']}"
+        flag = "  ** at or over threshold **" if key in report["over"] else ""
+        lines.append(f"{key:<10} {w['used_percentage']}%  {reset}{flag}")
+    lines.append(f"age {describe_age(report['age_seconds'])} "
+                 f"(captured {local_time(report['captured_at'])})")
+    if report["state"] == "stale":
+        lines.append(f"stale: no current reading within {report['max_age_seconds'] // 60}m — "
+                     "not evidence of being under any threshold")
+    return "\n".join(lines)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--check", type=float, metavar="PCT", help="exit 1 when any window is at or above PCT")
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--max-age", type=float, default=DEFAULT_MAX_AGE_MINUTES, metavar="MINUTES",
+                    help=f"minutes before a reading is stale (default {DEFAULT_MAX_AGE_MINUTES})")
+    args = ap.parse_args()
+
+    report = assess(read(latest_path()), time.time(), int(args.max_age * 60), args.check)
+    print(json.dumps(report) if args.json else text(report))
+    return {"ok": OK, "over": OVER, "stale": STALE, "missing": MISSING}[report["state"]]
+
+
+if __name__ == "__main__":
+    sys.exit(main())

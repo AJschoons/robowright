@@ -1,0 +1,35 @@
+{ "_doc": "ILLUSTRATIVE — the launcher suite reads only its unit block. Example launch.json for a headless Mac reached over SSH, where the Owner pastes every launch line. Copied to ~/.claude/robowright/launch.json beside profile.md. Patterns are POSIX ERE as bash's [[ =~ ]] reads them; group_regex captures the tracker prefix (SMPL) from a bare key (SMPL-482) or a keyed dir name (SMPL-482-export-csv). repos lists the main clones the Owner-side tools may run git in; a project's robowright.json naming any other is refused, and with no repos nothing is trusted.",
+
+  "schema": 1,
+  "sessions_root": "~/robowright/robowright-sessions",
+  "review_guide_dir": "reviews",
+  "report_scope": "all-roots",
+  "launch": "paste",
+
+  "unit": {
+    "ticket_regex": "^[A-Z][A-Z0-9]+-[0-9]+$",
+    "ticket_example": "SMPL-482",
+    "slug_regex": "^[a-z0-9]+(-[a-z0-9]+)*$",
+    "slug_example": "export-csv",
+    "group_regex": "^([A-Z][A-Z0-9]*)-[0-9]+(-[a-z0-9]+)*$"
+  },
+
+  "projects_root": "~/robowright/projects",
+  "repos": ["~/robowright/src/sample-app", "~/robowright/src/sample-api"],
+  "roles": {
+    "planner": {
+      "models_key": "planner",
+      "model": "opus",
+      "effort": "high",
+      "name_prefix": "planner",
+      "prompt": null
+    },
+    "lead": {
+      "models_key": "lead",
+      "model": "sonnet",
+      "effort": "medium",
+      "name_prefix": "lead",
+      "prompt": "/loop /lead watch"
+    }
+  }
+}

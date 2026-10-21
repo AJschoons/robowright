@@ -1,0 +1,9 @@
+.worktrees/
+.claude/worktrees/
+__pycache__/
+*.pyc
+.DS_Store
+.claude/autonomous-run
+site/node_modules/
+site/tests/out/
+site/out/
