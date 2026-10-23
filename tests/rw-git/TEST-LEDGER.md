@@ -527,3 +527,14 @@ X22 and X23 were red before the fix, so the unfixed line is each one's mutation.
 | U63-16 | the detach without `--no-overwrite-ignore` | X22 | X22 | KILLED |
 | U63-17 | the `worktree-unlisted` refusal prints the resolved path, not `--dir` as spelled | X23 | X23 | KILLED |
 | U63-18 | `--dir` resolved to the disk's letter case (`F_GETPATH`) | X24 | X24 X23 | KILLED; also red: X23, since `F_GETPATH` resolves the link too. X24 was green when written: it pins the refusal both reviews accepted |
+
+## U65 · every switch form keeps an ignored file (X25, X26)
+
+X25 was red before the code, so the unfixed line is its mutation. X26 is a declared guard: `--create` starts from
+HEAD, so no file changes and no compiling edit reddens it, the flag's removal included (U65-2). It guards against a
+git that refuses the flag beside `--create`, which would fail every `switch -c`.
+
+| # | Mutation | Predicted | Observed | Verdict |
+|---|---|---|---|---|
+| U65-1 | plain `switch <branch>` without `--no-overwrite-ignore` | X25 | X25 | KILLED; X26 and X22 green, as predicted |
+| U65-2 | `switch -c` without `--no-overwrite-ignore` | none | none | GUARD (X26): no compiling edit reddens it |

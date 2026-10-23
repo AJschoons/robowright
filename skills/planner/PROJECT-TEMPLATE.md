@@ -84,7 +84,7 @@ Rules for how implementation plans should be structured and executed on this pro
 
 > Sizes and complexity are deliberately relative — translating to calendar days requires deeper planning than this workflow covers.
 >
-> The `Unit` cell is the unit's `run.json.ticket` — the slug, or the tracker key on an install whose `launch.json` sets `unit.ticket_regex`.
+> The `Unit` cell is the unit id: `run.json.ticket`, or the session directory's name where there is none. That is the slug, or the tracker key on an install whose `launch.json` sets `unit.ticket_regex`.
 >
 > The Planner fills `Summary` when the row is created — one or two plain sentences on what the chunk does, never its status — and the dashboard shows it as the unit's purpose line, falling back to `Description` when it is empty.
 

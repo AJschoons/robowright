@@ -676,7 +676,8 @@ order. `<project_dir>` is `<projects_root>/<run.json.project>`, `<projects_root>
 2. Spawn the owner brief: `subagent_type: general-purpose`, `model: <run.json.robowright.explainer>`,
    the message the launcher's `explainer:guide` prompt (`run-launch.sh`, its `PROMPT=` line)
    word for word, with `$PROJECT` = `<project_dir>`, `$SESSION_DIR` = this session dir, and
-   `$GUIDE` = `<project_dir>/<launch.json review_guide_dir>/<run.json.ticket>-owner-brief.md`.
+   `$GUIDE` = `<project_dir>/<launch.json review_guide_dir>/<unit id>-owner-brief.md`, the unit id
+   `run.json.ticket`, else this session directory's name (the launcher's rule).
    No file at `$GUIDE` when it returns: spawn it once more; after a second miss, log it, and
    `HANDOFF.md`'s FIRST ACTION carries
    `run-launch.sh --explainer guide --project <project_dir> --run-dir <session_dir> --dry-run`

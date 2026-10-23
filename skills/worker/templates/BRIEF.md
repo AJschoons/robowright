@@ -7,7 +7,7 @@ against the worktree before acting; corrections go in `LEDGER.md` under `Brief c
 
 | | |
 |---|---|
-| `ticket` | `<slug>` — the unit-of-work id, in the form the project hook → Naming defines |
+| `ticket` | `<slug>` — the unit-of-work id, in the form the project hook → Naming defines, or `null` for work with no tracker key on an install whose `launch.json` sets `unit.ticket_regex`; then `project` is set, not null |
 | `repo` | `<repos[].name>` — the `robowright.json.repos` entry this brief works in; the Lead branches the worktree from that entry's `path`. A work-order brief, with no `robowright.json`, names the checkout directory's basename |
 | `client` | `<client>` \| `none` — the row of that repo's hook §1 client table the units build; `none` for a hook with no clients. `run.json.platform` is that client's `platform:` |
 | `worktree` | `<worktree path>` — where the project hook → Worktree puts it |

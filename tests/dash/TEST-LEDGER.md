@@ -833,3 +833,11 @@ D1, D2 and D4 red before the code; D3 a guard, green before it.
 
 Untested, read from the code and not run: a finished direct build whose session has exited, beside a live Planner,
 reads as showing both rows; no row asks for it.
+
+## U65 · a session with no ticket (065-T1)
+
+T1 red before the code: the row read `Not started`, no ticket claim for a session with no ticket.
+
+| # | Mutation | Predicted | Verdict |
+|---|---|---|---|
+| M1 | `ticket_of` returns `run.json.ticket` only, no slug fallback | T1 | match |

@@ -470,3 +470,28 @@ Applied to `owner_git.read_unlinked`, which `session_write.read` wraps; both tes
 | G7 | the checkout's `--no-recurse-submodules` dropped (gate fix round 2) | WT-14 | same | KILLED |
 | G8 | the failed checkout's `worktree remove` dropped | WT-15 | same | KILLED |
 | G9 | the branch `-b` made is never deleted after a failed checkout | WT-15 | same | KILLED |
+
+## U65 · tracker-less work under a ticket shape (TL-1–TL-7)
+
+TL-1, TL-3, TL-4, TL-5, TL-6, TL-7 and TL-2's ticket-less tail were red before the code, on the refusals the launcher
+printed for a missing ticket, a missing `--ticket` or a bare `--slug`. TL-3 was also seen red on its own assertion
+with B1 and B2 in and B3 out. TL-2's malformed half was green before it: the existing ticket-shape refusal.
+
+| # | Mutation | Predicted to fail | Observed | Verdict |
+|---|---|---|---|---|
+| M1 | `read_unit_id`'s no-ticket refusal under `ticket_regex` restored | TL-1, TL-2, TL-3, TL-4, TL-7 | same | KILLED |
+| M2 | `in_unit_form`'s plain-slug line under `ticket_regex` dropped | TL-1, TL-2, TL-3, TL-6 | same | KILLED |
+| M3 | the ticket-less, project-less, no-group refusal never fires | TL-3 | same | KILLED |
+| M4 | that refusal's `ticket_regex` guard dropped | TL-3 (its no-regex case) | same | KILLED |
+| M5 | `--planner brief`'s `--ticket` refusal under `ticket_regex` restored | TL-5 | same | KILLED |
+| M6 | `in_unit_form` accepts any one-segment name under `ticket_regex` | TL-7 | TL-7, TL-6 | KILLED; also red: TL-6, whose `Not-A-Unit_x` slug passes too |
+| M7 | the Worker path's post-launch `write_project` dropped | TL-4 | same | KILLED |
+
+## U65 · review fix round (TL-3's non-string `project`)
+
+TL-3's `7` and `["sample"]` cases were added after the end-of-stack review found that a `project` of any other type
+than a string passed the refusal; the unfixed filter is their mutation.
+
+| # | Mutation | Predicted to fail | Observed | Verdict |
+|---|---|---|---|---|
+| M8 | the refusal reads `project` with `.project // empty`, any non-null value as set | TL-3 (`7`, `["sample"]`) | same | KILLED |

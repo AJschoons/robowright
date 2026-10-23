@@ -115,8 +115,11 @@ session; a 200-line ledger read once is paid for on every later tick.
 project's. Before acting on a row, read `project` and `shape` from `run.json` in the `run_dir`
 that `run-roster.py --only <run> --json` prints. A `shape: one-off` row is never this Lead's.
 Any other row is this Lead's when `project` equals this project folder's name or, with `project` null, when
-`launch.json` → `unit.group_regex`'s first capture on its `ticket` does. A row not this Lead's is
+`launch.json` → `unit.group_regex`'s first capture on its unit id does: its `ticket`, else its session directory's
+name. A row not this Lead's is
 listed in the report and never acted on: no decision, resume, arm, re-read, `done` intake or Explainer launch.
+On an install with a ticket shape, a Worker launch of a session with no ticket, no `project` and a directory name in
+no group is refused.
 
 ### `running`
 
@@ -193,8 +196,9 @@ it re-cuts no planned unit, route it to a Planner; the Lead writes no briefing. 
 cause, then write `<project>/briefings/<unit>-diagnosis.md`: the cause at `file:line`, the live
 evidence you read, the Owner's words quoted, and the next free unit number in the Task Breakdown,
 which `<unit>` carries. Start a brief-only Planner with `run-launch.sh --planner brief --project
-<project dir> --slug <unit>` (and `--ticket <key>` where `launch.json` names a
-`unit.ticket_regex`) and launch what it hands back, as step 8 of `done` says. The ask counts as
+<project dir> --slug <unit>` (and `--ticket <key>` where `launch.json` names a `unit.ticket_regex`
+and the work has a tracker key; omitted for tracker-less work, whose session dir is
+`<sessions_root>/<unit>/`) and launch what it hands back, as step 8 of `done` says. The ask counts as
 the Owner's start: no replan. When the Planner wrote a direct-build briefing, the launcher still
 made `<sessions_root>/<unit>/` (`<ticket>-<unit>` with a ticket form) and wrote its launch line
 to the `LEDGER.md` there.

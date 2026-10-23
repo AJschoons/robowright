@@ -104,8 +104,10 @@
 #                         unit.slug_regex; the refusal shows unit.slug_example (required)
 #   --ticket <key>        with --planner brief, where launch.json names a unit.ticket_regex: the
 #                         tracker key this brief is for. It prefixes the Robowright Session dir and is
-#                         the unit id every later name is built from. Where launch.json names no
-#                         ticket shape, this flag is refused rather than ignored
+#                         the unit id every later name is built from. Optional where launch.json
+#                         names a ticket shape; omitted, the session dir is <sessions_root>/<slug>.
+#                         Where launch.json names no ticket shape, this flag is refused rather than
+#                         ignored
 #   --name <name>         session display name; default: the worker prefix, the model and the unit
 #                         id, lowercased. The document roles default to planner-<id>,
 #                         planner-<id>-r<n>, planner-<id>-review and explainer-<id>
@@ -676,14 +678,13 @@ make_worktree() {
 }
 
 # The unit of work a Robowright Session is for: run.json's `ticket`, which is what the Planner's
-# template writes. Where the install names a ticket shape, a brief carrying none is refused —
-# the guide path and the session name would otherwise be built from a directory name.
+# template writes. A brief carrying none takes the directory name as its unit id, as on an install
+# with no ticket shape; a ticket that is present is still held to the install's ticket shape.
 # A session writes its own run.json, so the ticket is held to one path segment before a path or
 # a prompt is built from it.
 TICKET_FORM='^[A-Za-z0-9][A-Za-z0-9._-]*$'
 read_unit_id() {
     UNIT_ID="$(jq -r '.ticket // empty' "$1/run.json")"
-    [ -n "$UNIT_ID" ] || [ -z "$TICKET_REGEX" ] || fail "$1/run.json has no ticket"
     if [ -n "$UNIT_ID" ]; then
         [[ "$UNIT_ID" =~ $TICKET_FORM ]] || fail "$1/run.json: 'ticket' must be one path segment of letters, digits, '.', '_' and '-' (got '$UNIT_ID')"
         [ -z "$TICKET_REGEX" ] || [[ "$UNIT_ID" =~ $TICKET_REGEX ]] || fail "$1/run.json: 'ticket' must look like $TICKET_EXAMPLE (got '$UNIT_ID')"
@@ -705,7 +706,8 @@ read_stop_code() {
 }
 
 # Whether a directory name is a unit name on this install: one safe segment whatever the install's
-# own patterns allow, then a slug, or <ticket>-<slug> split at whichever hyphen makes both halves match.
+# own patterns allow, then a slug, or, where the install names a ticket shape, <ticket>-<slug> split
+# at whichever hyphen makes both halves match.
 in_unit_form() {
     local ticket rest="$1"
     [[ "$1" =~ $TICKET_FORM ]] || return 1
@@ -713,6 +715,7 @@ in_unit_form() {
         [[ "$1" =~ $SLUG_REGEX ]]
         return
     fi
+    ! [[ "$1" =~ $SLUG_REGEX ]] || return 0
     while [[ "$rest" == *-* ]]; do
         rest="${rest#*-}"
         ticket="${1%"-$rest"}"
@@ -975,8 +978,7 @@ if [ -n "$PLANNER_MODE" ] || [ -n "$EXPLAINER_MODE" ]; then
             [[ "$SLUG" =~ $SLUG_REGEX ]] || fail "--slug must look like $SLUG_EXAMPLE (got '$SLUG')"
             UNIT_ID="$SLUG"
             SESSION_DIR="$SESSIONS_ROOT/$SLUG"
-            if [ -n "$TICKET_REGEX" ]; then
-                [ -n "$TICKET" ] || fail "--planner brief needs --ticket <key>, e.g. $TICKET_EXAMPLE"
+            if [ -n "$TICKET_REGEX" ] && [ -n "$TICKET" ]; then
                 [[ "$TICKET" =~ $TICKET_FORM ]] || fail "--ticket must be one path segment of letters, digits, '.', '_' and '-' (got '$TICKET')"
                 [[ "$TICKET" =~ $TICKET_REGEX ]] || fail "--ticket must look like $TICKET_EXAMPLE (got '$TICKET')"
                 UNIT_ID="$TICKET"
@@ -1152,6 +1154,13 @@ PHASE="$(jq -r '.phase // "preflight"' "$SESSION_DIR/run.json")"
 read_stop_code "$SESSION_DIR"
 WORKTREE="$(jq -r '.worktree // empty' "$SESSION_DIR/run.json")"
 read_unit_id "$SESSION_DIR"
+# Where the install names a ticket shape its group_regex may read a tracker key, so a session with no
+# ticket and a bare directory name can be in no project; its brief names one instead.
+if [ -n "$TICKET_REGEX" ] && [ -z "$(jq -r '.ticket // empty' "$SESSION_DIR/run.json")" ] \
+    && [ -z "$(jq -r '.project | if type == "string" then . else empty end' "$SESSION_DIR/run.json")" ] \
+    && ! match_group "$UNIT_ID" --soft; then
+    fail "$SESSION_DIR/run.json has no ticket and no project, and '$UNIT_ID' is in no unit.group_regex group — a brief with no ticket names its project in run.json.project"
+fi
 # An accepted Robowright Session's worktree is torn down, so this is refused before the worktree checks:
 # "worktree does not exist" reads as a broken brief rather than as work that is already finished.
 [ "$PHASE" != "done" ] || fail "run.json phase is done"

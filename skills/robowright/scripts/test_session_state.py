@@ -3934,7 +3934,7 @@ class UnitOfWorkTests(SessionCase):
         self.assertIn("ticket_regex", out)
 
     def test_launcher__where_launch_json_names_a_ticket_shape_a_brief_is_built_from_it(self):
-        """An install with a tracker names its unit of work by key: the key is required, shape-checked, and it — not the slug — is the directory prefix and the id the Planner is briefed for."""
+        """An install with a tracker names its unit of work by key: the key is shape-checked, and it — not the slug — is the directory prefix and the id the Planner is briefed for. With no key the slug is both, the Owner's decision (allow no ticket)."""
         root = self.dir / "fixture"
         project = self.given_project(root)
         sessions = root / "sessions"
@@ -3952,8 +3952,9 @@ class UnitOfWorkTests(SessionCase):
             return self.launch(env, "--planner", "brief", "--project", str(project), "--slug", "review-feedback", "--dry-run", *flags)
 
         code, out = brief()
-        self.assertEqual(code, 1, out)
-        self.assertIn("ABC-1234", out)
+        self.assertEqual(code, 0, out)
+        self.assertIn("%s/review-feedback\n" % sessions.resolve(), out)
+        self.assertIn("intake:    none found", out)
         code, out = brief("--ticket", "nope-1")
         self.assertEqual(code, 1, out)
         self.assertIn("ABC-1234", out)
@@ -3967,7 +3968,7 @@ class UnitOfWorkTests(SessionCase):
         self.assertNotIn(str(other.resolve()), out)
 
     def test_launcher__the_unit_id_is_the_ticket_run_json_carries(self):
-        """Every install's templates write `ticket`, and the guide path, the session name and the plan line are built from it; where the install names a ticket shape, a brief that carries none is refused rather than quietly named after its directory."""
+        """Every install's templates write `ticket`, and the guide path, the session name and the plan line are built from it; a brief that carries none is named after its directory, where the install names a ticket shape too (the Owner's decision, allow no ticket), and a ticket outside that shape is still refused."""
         session, worktree, env = self.given_launcher_fixture()
         self.given_session()
         project = self.given_project(session.parent.parent)
@@ -3985,14 +3986,18 @@ class UnitOfWorkTests(SessionCase):
         code, out = self.launch(env, "--run-dir", str(session), "--dry-run")
         self.assertEqual(code, 0, out)
         self.assertIn("(sample-001-x, phase", out)
-        # An install whose units are tracker keys has no directory-name fallback to make.
+        # An install whose units are tracker keys takes the same fallback, and still holds a ticket to its shape.
         home = session.parent.parent / "home"
         self.write_launch_config(home, dict(json.loads((home / ".claude/robowright/launch.json").read_text()),
                                             unit=dict(json.loads((home / ".claude/robowright/launch.json").read_text())["unit"],
                                                       ticket_regex="^[A-Z][A-Z0-9]*-[0-9]+$", ticket_example="ABC-1234")))
         code, out = self.launch(env, "--run-dir", str(session), "--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertIn("(sample-001-x, phase", out)
+        given(ticket="sample-001-renamed")
+        code, out = self.launch(env, "--run-dir", str(session), "--dry-run")
         self.assertEqual(code, 1, out)
-        self.assertIn("no ticket", out)
+        self.assertIn("ABC-1234", out)
 
     def test_launcher__brief_is_shorthand_for_the_planner_s_brief_mode(self):
         """The shorthand is what the handbooks print for the commonest launch there is, and it is the one flag a caller written for another install would otherwise be refused on."""

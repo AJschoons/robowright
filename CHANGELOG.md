@@ -18,3 +18,8 @@ Landed 2026-10-22: `rw-git --dir <path> <form>`, the worktree resolved from `<pa
 directory, through the same checks, since a `cd` outside a desktop-app session's folders does not stick;
 `rw-git where`, printing the worktree, repository, git directory, kind and HEAD it resolved; and
 `rw-git switch --detach <full id>`, with `switch <branch>` as the way back.
+
+Landed 2026-10-23: every `rw-git switch` form passes `--no-overwrite-ignore`, so a switch that would replace an
+ignored file the target tracks exits 1 instead; and on an install whose `launch.json` sets `unit.ticket_regex`, work
+with no tracker key is briefed and launched, its unit id the session directory's name, and built directly from a
+plain `--slug`.

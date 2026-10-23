@@ -375,9 +375,9 @@ project `sample`; SLUG `sample-001-first`. `TicketClaim` writes its own Task Bre
 R1 — A session with a `run.json` is filed under `run.json.project` when that is a non-empty string, and under its directory name's capture otherwise.
 R2 — A session with no `run.json` (a brief being written) is filed under the capture, as before.
 R3 — A session whose project has no folder with a `PROJECT.md` is an orphan, listed on the index under "Sessions with no project folder" and on no project's page.
-R4 — A Task Breakdown row claims every session whose `run.json.ticket` equals its Unit cell (backticks stripped, trimmed), before any name rule.
+R4 — A Task Breakdown row claims every session whose unit id equals its Unit cell (backticks stripped, trimmed), before any name rule. The unit id is `run.json.ticket`, else the session directory's name (U65; before it, a session with no ticket had none).
 R5 — A session claimed by ticket belongs to that row only. The name-after-the-number and owned-number rules apply only to sessions that no row claimed by ticket, whatever the rows' order.
-R6 — A session whose ticket is null, or equals no row's Unit cell, is claimed by the name rules as before.
+R6 — A session whose unit id equals no row's Unit cell is claimed by the name rules as before.
 R7 — The owner-brief directory under the project folder is launch.json's `review_guide_dir`, both for the Lead's hold and for the card's Decide-now asks.
 R8 — When `review_guide_dir` is absent or empty, the directory is `reviews`.
 
@@ -1122,3 +1122,17 @@ Fixture: project `sample`, U1 `first`; SLUG's folder under the sessions root as 
 | 057-D2 | running, folder, Planner | the fixture; `planner-sample-001-first` busy; `worker-sample-001-first` busy | `--once <out>` | one row for SLUG, drawing a Worker; the crew card says `direct build`; no page says `Planner briefing` | briefing B2: "the dashboard shows the direct build's row and not the briefing row: the build is the later fact" | `test_shows_one_row_the_direct_builds__when_a_planner_is_alive_for_the_folder` |
 | 057-D3 | running, run.json | SLUG implementing (a run.json); `worker-sample-001-first` busy | `--once <out>` | one row for SLUG, the session's: the crew card does not say `direct build` | briefing B1: "a folder with a `run.json` still excludes a direct-build row for its unit, as today" | `test_shows_only_the_sessions_row__when_the_units_folder_holds_a_run_json` |
 | 057-D4 | finished, folder | the fixture, no Planner; SLUG's change description in `prs/`, its Worker idle in a worktree no main holds | `robowright-dash.py sample` | U1 reads `with the Lead` | briefing B1: "or finished (`prs/<slug>.md`)"; as 039-L1 | `test_reads_the_finished_direct_build_with_the_lead__when_its_unit_has_a_folder_with_no_run_json` |
+
+## 065 · a session with no ticket
+
+From U65 (parked-fixes), a direct build. Where `launch.json` names a ticket shape, a session may now carry no ticket;
+its unit id is then its directory's name, as the launcher reads it. `ticket_of` returns that unit id, so the ticket
+claim and the spend card read a ticket-less session as they read any other.
+
+Fixture: project `sample` planning `| U1 | \`export-csv\` | Exports notes as CSV | … |`; a bare-slug session dir
+`export-csv` implementing, `ticket` null, `project` `sample`, a dollar limit (DOLLAR_BRIEF); `records.jsonl` holding
+two session records whose `unit` is `export-csv` and one whose `unit` is `sample-001-first`.
+
+| # | Area | Given | When | Then | Source | Test |
+|---|---|---|---|---|---|---|
+| 065-T1 | no ticket, bare slug | the fixture | `--once <out>` | U1's state links `export-csv`; the `export-csv` card's spend line sums the two `export-csv` records only | the U65 note: a ticket-less session shows in each reader as its unit id, the directory name; 023-U2-B4.1, U2-R2.1 | `test_claims_and_prices_a_session_with_no_ticket__by_its_directory_name` |

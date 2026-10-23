@@ -20,10 +20,15 @@ the subcommands below, each held to its shape, and keeps git from running any pr
                                               the same, refused unless every path the commit changes (a rename
                                               under its new path) matches a line of <file>: one literal pathspec per
                                               line, `#` comments and blank lines skipped
-    rw-git switch -c <branch>                 make an own branch at HEAD and switch to it
-    rw-git switch <branch>                    switch to an own branch (unmanaged: any existing branch)
+    rw-git switch -c <branch>                 make an own branch at HEAD and switch to it; git refuses (exit 1) when
+                                              that would lose a local change, an ignored file the target tracks
+                                              included
+    rw-git switch <branch>                    switch to an own branch (unmanaged: any existing branch); git refuses
+                                              (exit 1) when that would lose a local change, an ignored file the
+                                              target tracks included
     rw-git switch --detach <commit>           detach HEAD at a full commit id, moving no branch; git refuses (exit 1)
-                                              when that would lose a local change
+                                              when that would lose a local change, an ignored file the target tracks
+                                              included
     rw-git reset --soft <commit>              move the own branch to a full commit id, keeping index and files;
                                               prints the old tip
     rw-git reset --keep <commit>              the same, resetting the index and the files that differ; git refuses
@@ -77,7 +82,8 @@ unprotected one; reset and push --force-with-lease also refuse a branch a remote
 (case folded) or an upstream tracks, as of the last fetch. Each of those is refused on a detached HEAD (`switch
 --detach` is how a session gets there, and `switch <branch>` back), and, but for the --continue / --abort steps,
 with a merge, rebase, cherry-pick or revert stopped half way; `switch`, in each form, is refused for such a stopped
-operation but not on a detached HEAD. An unmanaged checkout's message file lies
+operation but not on a detached HEAD. Every `switch` form passes --no-overwrite-ignore, so an ignored file the
+target branch or commit tracks is never replaced. An unmanaged checkout's message file lies
 under /private/tmp/claude-<uid>/, the account's DARWIN_USER_TEMP_DIR or a granted folder, and never inside the repository.
 
 What it keeps git from running. Through the installed wrapper only PATH and HOME reach it, so an ssh agent's
@@ -1077,8 +1083,8 @@ def switch(place, create, branch):
     if create or place.slug is not None:
         own_branch(place, branch)
     if create:
-        return run(place, "switch", "--no-track", f"--create={branch}")
-    return run(place, "switch", "--no-guess", branch)
+        return run(place, "switch", "--no-overwrite-ignore", "--no-track", f"--create={branch}")
+    return run(place, "switch", "--no-overwrite-ignore", "--no-guess", branch)
 
 
 def detach(place, target):

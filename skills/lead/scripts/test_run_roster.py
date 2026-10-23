@@ -359,6 +359,11 @@ class UnitNameTests(RosterCase):
         self.given_plan("| U7 | `ENG-7` | Totals the sample's spend per unit. | x | S | in progress |")
         self.assertEqual(self.units_cell("sample-007-totals", ticket="ENG-7"), "U7 (Totals the sample's) · 3/5")
 
+    def test_render__labels_a_session_with_no_ticket_by_its_directory_name(self):
+        """065-N1 — a bare-slug dir `export-csv` with no ticket, project `sample`, row `U9 | export-csv`, prints `U9 (export-csv) · 3/5` — its unit id is the directory name, as the launcher reads it (the U65 note)."""
+        self.given_plan("| U9 | `export-csv` | Exports notes as CSV. | x | S | in progress |")
+        self.assertEqual(self.units_cell("export-csv", ticket=None, project="sample"), "U9 (export-csv) · 3/5")
+
     def test_render__prints_no_control_byte_from_the_plan__in_the_unit_label(self):
         """039-N4 — a Summary carrying ESC `[2J` and a BEL prints `U7 (Totals[2J the sample's) · 3/5`, no control byte — PROJECT.md is session-writable, and an escape sequence would reach the Lead's terminal (`session-inputs.md`)."""
         self.given_plan("| U7 | `ENG-7` | Totals\x1b[2J the\x07 sample's spend. | x | S | in progress |")

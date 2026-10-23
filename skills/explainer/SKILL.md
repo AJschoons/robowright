@@ -81,8 +81,9 @@ evidence behind them is in `robowright/DESIGN.md` §10.
 5. **Where the detail lives** — `INTAKE.md`, `PLAN-REVIEW.md`, the gate reviews, the evidence
    directory, the change description.
 
-**The cap.** Find the row in `PROJECT.md` § Task Breakdown whose `Unit` cell is `run.json.ticket` —
-the slug, or the tracker key on an install whose `launch.json` sets `unit.ticket_regex`:
+**The cap.** Find the row in `PROJECT.md` § Task Breakdown whose `Unit` cell is the unit id:
+`run.json.ticket`, else the session directory's name (the launcher's rule). That is the slug, or the tracker key
+on an install whose `launch.json` sets `unit.ticket_regex`.
 `Size` M, L or XL caps the owner brief at 1,000 words; S or XS, or no row or no size, at 400.
 Run `wc -w` on the finished file. Over the cap, cut whole rows, lowest-ranked first, before trimming sentences.
 Write the cap and the count into the header, then hand both to `reviewer-docs` in its message as

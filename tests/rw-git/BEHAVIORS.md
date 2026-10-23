@@ -273,3 +273,17 @@ order, "Decisions" and "Proof", and the brief that bounds it, or the row named t
 | X22 | git refuses a detach that would overwrite an ignored file | the base tracks `notes.txt`; the branch stops tracking it and ignores it; the session's own `notes.txt` | `--dir <worktree> switch --detach <base id>` | exit 1; `notes.txt` intact; HEAD on the branch | work order, Decisions: git refuses "when it would lose a local change"; `git help switch`: `--overwrite-ignore` is the default, so the detach passes `--no-overwrite-ignore` (review fix round) |
 | X23 | a refusal names `--dir` as spelled, never what it resolves to | a link under the scratch root to a plain folder outside every checkout | `--dir <link> where` | exit 2, `refused: worktree-unlisted` naming the link; the folder it leads to not named | review fix round: rw-git resolves the path outside the sandbox, and a working directory was already canonical, so only `--dir` could make a refusal print a link's target |
 | X24 | a `--dir` spelled in another letter case than the disk's is refused, never served under weaker protection | the managed worktree; `desk/notes-app` under a `desktop_roots` entry, on `feature`, which its `protected_branches` lists | `--dir` with a path segment of each in upper case: `where`; `add f` | exit 2, `refused: worktree-unlisted` each; nothing staged | review fix round: the lookup is by canonical path, which keeps the spelling's case, and git names a checkout in the disk's; a match on the spelling would read `protected_branches` for a key that is not the repository's |
+
+## Every switch form keeps an ignored file (U65)
+
+Git's `switch` defaults to `--overwrite-ignore`, so a branch that tracks a path the worktree holds as an ignored file
+would replace that file silently. X22 pins the refusal for `switch --detach`; these rows pin it for the other two
+forms. Each runs as X22 does, `--dir <worktree>` from a plain folder outside every checkout. The fixture is X22's,
+with a second own branch: `robowright/sample-001-x-u2` made while `notes.txt` is tracked, so it tracks the file;
+back on `robowright/sample-001-x`, the file untracked and ignored; then the session's own `notes.txt`. Source of
+every expected value: the U65 note, Scope 1, or X22.
+
+| # | Rule | Given | When | Then | Expected value from |
+|---|---|---|---|---|---|
+| X25 | git refuses a plain switch that would overwrite an ignored file | the fixture | `--dir <worktree> switch robowright/sample-001-x-u2` | exit 1; `notes.txt` reads `mine`; HEAD on `robowright/sample-001-x` | the U65 note, Scope 1: every switch form takes the flag, and git exits 1 losing nothing; X22 |
+| X26 | `switch -c` takes the flag too, and it is inert there | the fixture | `--dir <worktree> switch -c robowright/sample-001-x-u3` | exit 0; HEAD on `robowright/sample-001-x-u3`; `notes.txt` reads `mine` | the U65 note, Scope 1, and the briefing's call that `-c` takes the flag for uniformity; `--create` starts from HEAD, so no file changes |

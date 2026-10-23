@@ -257,3 +257,25 @@ its own.
 | DL-11 | a registry `cwd` that is not the worktree makes the launch exit non-zero, naming both paths | the stub registers the session with `cwd` the project folder; then registers nothing | `--yes` | exit 1; the output names the worktree and the registry's `cwd`, or says the registry shows none | "confirms from the session registry that the new session's `cwd` is the worktree" |
 | DL-12 | `--dry-run` prints the plan and creates nothing | the worktree absent | `--dry-run` | exit 0; the plan names the `worktree add -b` line, `build-sample-001-x` and the prompt; no worktree, no branch, no `DECISIONS.md`; the stub never ran; no `worktree add` | the brief's verify list |
 | DL-13 | the model and effort are held to their shapes, and no flag of another shape is taken | `--model` with a quote, `--effort huge`; `--direct` with `--run-dir`, `--name`, `--planner`; a Worker launch given `--repo`, `--base` or `--briefing` | `--dry-run` | exit 1 naming the flag, or saying they go with `--direct`; no `command:` line | "checked against `models.json` like every other model" |
+
+## Tracker-less work under a ticket shape (U65)
+
+Where `launch.json` sets `unit.ticket_regex`, work with no tracker key is briefed, launched and built like any other:
+a `run.json` with no ticket takes the session directory's name as its unit id, held to the install's unit form, as on
+an install with no ticket shape. A ticket that is present is still held to the ticket form and to the regex. Such a
+session still names its project: a Worker launch whose directory name is in no `group_regex` group needs
+`run.json.project`. Source of every expected value: the Owner's decision (allow no ticket) and the U65 note, Scope 2.
+
+Every TL fixture: `launch.json`'s `unit` is the desktop example's (`ticket_regex` `^[A-Z][A-Z0-9]+-[0-9]+$`, example
+`SMPL-482`; `slug_regex` `^[a-z0-9]+(-[a-z0-9]+)*$`; `group_regex` `^([A-Z][A-Z0-9]*)-[0-9]+(-[a-z0-9]+)*$`), and a
+`claude` stub that registers the session it starts. "The no-regex config" is the same block with no `ticket_regex`.
+
+| # | Rule | Given | When | Then | Expected value from |
+|---|---|---|---|---|---|
+| TL-1 | a session with no ticket launches under a ticket shape, its unit id the directory name | `ticket` null, `project` `sample`, model `opus`, session dir `sample-001-x` | `--dry-run`; `--yes` | exit 0, `(sample-001-x, phase` in the plan; the stub given `--name worker-opus-sample-001-x`; the launch index line's unit `sample-001-x`, project `sample` | the Owner's decision (allow no ticket): no ticket falls back to the directory-name unit form, as with no regex |
+| TL-2 | a malformed ticket is still refused | `ticket` `sample-001-x`, then `ABC-1/../../../x`, under the regex | `--dry-run` | exit 1 naming `run.json` and `ticket`; no `command:` line | the Owner's decision (allow no ticket): a present, malformed ticket is still refused (pinned by the existing `SteeredValueTests` ticket-shape test, beside the ticket-less case) |
+| TL-3 | a ticket-less Worker launch outside every group needs `run.json.project`, a string | `ticket` null, `project` null, then `7`, then `["sample"]`, session dir `export-csv`; then `project` `sample`; then `project` null on the no-regex config | `--dry-run` | exit 1, the refusal names `run.json.project` and `group_regex`, no `command:` line; then exit 0; then exit 0 with `project` null | the U65 note, Scope 2: a ticket-less session is still attributed to its project; the no-regex case is the Worker site's no-match rule (`ProjectTests`, assumed U1 Q15) |
+| TL-4 | a ticket-less session dir in a group takes its project from the capture | `ticket` null, `project` null, session dir `SMPL-482-export-csv` | `--yes` | exit 0; `project` `SMPL` | the U65 note, Scope 2: a ticket-shaped name is unchanged; `ProjectTests`' group capture |
+| TL-5 | `--planner brief` takes no `--ticket` under a ticket shape | an intake under `SMPL-482-export-csv` | `--planner brief --slug import-csv --dry-run` | exit 0; the plan names `<root>/import-csv` and `planner-import-csv`; `intake:    none found` | the Owner's decision (allow no ticket): `--ticket` is optional, and with none the session dir is `<root>/<slug>`; a bare slug is in no group, so inherits no intake |
+| TL-6 | `--direct --slug` takes a plain slug under a ticket shape | DL's fixture under the regex | `--direct --slug export-csv --dry-run`; `--slug Not-A-Unit_x` | exit 0, the plan names `<repo>/.worktrees/export-csv`; exit 1 naming `--slug` | the U65 note, Scope 2: `in_unit_form` takes a plain slug under a regex, through `TICKET_FORM` then `SLUG_REGEX`; DL-4 |
+| TL-7 | a session dir that is neither a slug nor `<ticket>-<slug>` is still refused | `ticket` null, `project` `sample`, session dir `Not-A-Unit_x` | `--dry-run` | exit 1 naming `run.json` and the directory name; no `command:` line | the U65 note, Scope 2: a ticket-less name passes exactly a no-regex install's checks; SI-11 |

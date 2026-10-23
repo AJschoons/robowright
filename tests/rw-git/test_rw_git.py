@@ -3124,6 +3124,39 @@ class ExplicitWorktreeTests(RwGitCase):
                     self.refused("worktree-unlisted", "--dir", spelled, *args, cwd=self.outside)
             self.assertEqual(self.staged(where), [])
 
+    def given_ignored_notes_on_branch_and_tracked_on_u2(self):
+        """X25-X26's fixture: robowright/sample-001-x-u2 tracks notes.txt; the branch ignores it; the session's own."""
+        self.commit_in(self.worktree, "notes.txt", "tracked\n", "track notes")
+        self.git(self.worktree, "branch", f"{BRANCH}-u2")
+        self.git(self.worktree, "rm", "-q", "--cached", "notes.txt")
+        (self.worktree / ".gitignore").write_text("notes.txt\n")
+        self.git(self.worktree, "add", ".gitignore")
+        self.git(self.worktree, "commit", "-q", "-m", "ignore notes")
+        (self.worktree / "notes.txt").write_text("mine\n")
+        return self.head()
+
+    def test_switch__to_a_branch_that_tracks_an_ignored_file_fails(self):
+        """X25 · u2 tracks notes.txt, the branch ignores it, the session has its own: `switch <u2>` exits 1, the file
+        and HEAD stay — git's default would overwrite an ignored file silently."""
+        tip = self.given_ignored_notes_on_branch_and_tracked_on_u2()
+
+        code, _, err = self.rw("--dir", str(self.worktree), "switch", f"{BRANCH}-u2", cwd=self.outside)
+
+        self.assertEqual(code, 1, err)
+        self.assertEqual((self.worktree / "notes.txt").read_text(), "mine\n")
+        self.assertEqual((self.branch(), self.head()), (BRANCH, tip))
+
+    def test_switch__create_keeps_an_ignored_file(self):
+        """X26 · `switch -c <u3>` over X25's fixture: exit 0, on u3, notes.txt intact. A declared guard: `--create`
+        starts from HEAD, so no file changes and no compiling edit reddens it, the flag's removal included. It guards
+        against a git that refuses --no-overwrite-ignore beside --create, which would fail every `switch -c`."""
+        self.given_ignored_notes_on_branch_and_tracked_on_u2()
+
+        self.ok_at(self.worktree, "switch", "-c", f"{BRANCH}-u3")
+
+        self.assertEqual(self.branch(), f"{BRANCH}-u3")
+        self.assertEqual((self.worktree / "notes.txt").read_text(), "mine\n")
+
     def test_help__names_dir_where_and_switch_detach(self):
         """X21 · `rw-git --help`: names `--dir <path>`, `where` and `switch --detach` — the call shape a session learns."""
         out = self.ok("--help", cwd=self.outside)

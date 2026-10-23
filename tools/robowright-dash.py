@@ -816,7 +816,7 @@ def owned_session_numbers(status: str) -> set:
 
 
 def ticket_claims(units: list, sessions: list) -> dict:
-    """Slug → the first row, in table order, whose Unit cell equals the session's run.json.ticket."""
+    """Slug → the first row, in table order, whose Unit cell equals the session's unit id (ticket_of)."""
     claims = {}
     for u in sorted(units, key=lambda u: u["row"]):
         for s in sessions:
@@ -916,8 +916,9 @@ def read_ledger() -> list | None:
     return COST_ROLLUP.read_records(path)
 
 
-def ticket_of(session: dict) -> str | None:
-    return (session.get("run") or {}).get("ticket")
+def ticket_of(session: dict) -> str:
+    """The unit id, as the launcher reads it: run.json.ticket (held_run keeps only a string), else the session's slug."""
+    return (session.get("run") or {}).get("ticket") or session["slug"]
 
 
 def budgets_in_dollars(run: dict) -> bool:

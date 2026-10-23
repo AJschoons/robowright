@@ -492,6 +492,15 @@ class LedgerRecordTests(LedgerCase):
             {"scope": "session", "source": "hook", "project": "sample", "unit": "sample-013-ledger",
              "unit_id": None, "session_id": ENDING_SESSION, "session_dir": str(self.run_dir)})
 
+    def test_record_names_its_directory_as_the_unit__when_run_json_has_no_ticket(self):
+        """U65: a session with no ticket has its directory's name as its unit id, as the launcher reads it; a record whose unit is null lands in no unit's row (the U65 note)."""
+        self.given_run(ticket=None)
+
+        self.must_ledger()
+
+        self.assertTrue(self.records())
+        self.assertEqual({r["unit"] for r in self.records()}, {"sample-013-ledger"})
+
     def test_record_is_stamped_with_an_offset_timestamp(self):
         """`at` is compared across machines and against event times written with an offset; a naive timestamp is ambiguous by the machine's zone (§6: "ISO-8601 with offset")."""
         self.must_ledger()

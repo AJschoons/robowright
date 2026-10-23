@@ -3026,6 +3026,43 @@ class TicketClaim(DashScratch):
         self.assertIn("001", self.plan_states().get("U1", ""))
 
 
+class TicketlessSession(DashScratch):
+    """065-T1: launch.json naming both roots; project `sample` planning U1 `export-csv`; a bare-slug session
+    `export-csv` with no ticket, filed under `sample`; the accounting root `<base>/accounting`."""
+
+    given_ledger = Spend.given_ledger
+    run_once = Spend.run_once
+    spend = Spend.spend
+    plan_states = TicketClaim.plan_states
+
+    def setUp(self):
+        super().setUp()
+        self.given_launch_roots()
+        folder = self.projects / "sample"
+        folder.mkdir(parents=True)
+        (folder / "PROJECT.md").write_text(project_md(PLAN_HEADER, "| U1 | `export-csv` | Exports notes as CSV | sample | S | low | in progress |"))
+        self.session = self.given_session(slug="export-csv", ticket=None, project="sample", **DOLLAR_BRIEF)
+        self.accounting = self.base / "accounting"
+
+    def test_claims_and_prices_a_session_with_no_ticket__by_its_directory_name(self):
+        """065-T1 — the row whose Unit cell is the directory name claims the session, and its card sums the records
+        whose unit is that name — its unit id is the directory name, as the launcher reads it (the U65 note)."""
+        self.given_ledger(
+            ledger_record("export-csv", "worker", "w-1", 12, 3_400, 1.25, 1_800, session_dir=self.session),
+            ledger_record("export-csv", "reviewer", "r-1", 5, 1_100, 0.40, 1_080, session_dir=self.session),
+            ledger_record(SLUG, "worker", "w-2", 3, 600, 0.20, 360),
+        )
+
+        result = self.run_once()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("export-csv", self.plan_states().get("U1", ""))
+        spend = self.spend(card="export-csv")
+        self.assertEqual(len(spend), 1, spend)
+        self.assertRegex(spend[0], shows("17 requests"))
+        self.assertRegex(spend[0], shows("$1.65 est."))
+
+
 class OwnerBriefDirectory(DashScratch):
     """launch.json naming both roots and `review_guide_dir: "guides"`; project `sample`, whose robowright.json asks for
     an owner brief; SLUG done, through intake, its worktree not in main — so only the owner brief can still hold it."""

@@ -566,6 +566,12 @@ def ledger_record(identity, b, wall, active, plan):
     })
 
 
+def unit_of(run, run_dir):
+    """The unit id, as the launcher reads it: run.json's ticket, else the session directory's name."""
+    ticket = run.get("ticket")
+    return ticket if isinstance(ticket, str) and ticket else os.path.basename(os.path.abspath(run_dir))
+
+
 def session_records(run, run_dir, session_id, transcript, source):
     buckets, first, last = measure_buckets(session_transcripts(transcript), "worker")
     wall = (last - first).total_seconds() if first and last else 0
@@ -576,7 +582,7 @@ def session_records(run, run_dir, session_id, transcript, source):
     at = now_iso()
     return [ledger_record({
         "scope": "session", "at": at, "source": source,
-        "project": run.get("project"), "unit": run.get("ticket"), "unit_id": None,
+        "project": run.get("project"), "unit": unit_of(run, run_dir), "unit_id": None,
         "role": role, "model": model, "session_id": session_id,
         "session_dir": os.path.abspath(run_dir), "transcripts_pinned": pinned,
     }, b, wall, active, plan) for (role, model), b in sorted(buckets.items())]
@@ -593,7 +599,7 @@ def unit_records(run, run_dir, paths, windows, source):
         active = wall - paused_seconds(run_dir, start, close)
         out[unit_id] = [ledger_record({
             "scope": "unit", "at": at, "source": source,
-            "project": run.get("project"), "unit": run.get("ticket"), "unit_id": unit_id,
+            "project": run.get("project"), "unit": unit_of(run, run_dir), "unit_id": unit_id,
             "role": role, "model": model, "session_id": session_id,
             "session_dir": os.path.abspath(run_dir), "transcripts_pinned": bool(run.get("transcripts")),
         }, b, wall, active, plan) for (session_id, role, model), b in sorted(buckets.items())]

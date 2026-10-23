@@ -69,3 +69,20 @@ reads `briefed`. Tested in `skills/robowright/scripts/test_session_state.py`: S 
 | 052a-S3 | the fixture | `park --by lead --reason <why>` | refused `park-is-owner`, `run.json` untouched | as S2 | `test_park__from_briefed_refused_for_anyone_but_the_owner` |
 | 052a-S4 | `intake`, `implementing`, `end-of-stack`, `awaiting-rotation` in turn | `park --by owner --reason <why>` | refused `from-state`, `run.json` untouched | `state-machine.json` `park.from` = `briefed`, `done`, `stopped`; replaces U2's R2 set | `test_park__refused_from_every_state_but_briefed_done_and_stopped` |
 | 052a-R1 | the fixture, parked by the state tool from `briefed` | the roster, `--json` | the row's verdict is `parked` | REPLAN U52a → A: "the roster prints a parked session on its `parked:` line unchanged" | `test_roster__a_session_parked_from_briefed_reads_parked` |
+
+## 065 · a session with no ticket is labelled by its directory name
+
+From U65 (parked-fixes), a direct build. Where `launch.json` names a ticket shape, a session may now carry no ticket;
+its unit id is then its directory's name, as the launcher reads it. The roster's plan label matches the Task Breakdown
+row on that unit id, not on the raw `ticket`, so a ticket-less session is labelled like any other. The row's `ticket`
+field stays the raw value.
+
+Fixture: a bare-slug session dir `export-csv`, `ticket` null, `project` `sample`, 3 of 5 brief units done, a busy live
+session; project `sample` planning `| U9 | \`export-csv\` | Exports notes as CSV. | … |`.
+
+| # | Area | Given | When | Then | Source | Test |
+|---|---|---|---|---|---|---|
+| 065-N1 | no ticket, bare slug | the fixture | `render()` | the units cell reads `U9 (export-csv) · 3/5` | the U65 note: a ticket-less session shows in each reader as its unit id, the directory name; the launcher's fallback | `test_render__labels_a_session_with_no_ticket_by_its_directory_name` |
+
+Red before the code: N1 (`'3/5' != 'U9 (export-csv) · 3/5'`). A dir in the `<project>-NNN-<rest>` form would match
+through the name rules already, so the row uses a bare slug.

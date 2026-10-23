@@ -579,7 +579,7 @@ def plan_label(run_dir, run):
             rows = plan_rows(f.read(), project)
     except OSError:
         return None
-    ticket = run.get("ticket")
+    ticket = run.get("ticket") or slug
     number = re.search(r"-(\d{3})-", slug)
     rest = re.sub(r"^\d{3}-", "", slug[len(project) + 1:])
     row = (next((r for r in rows if r[1] and r[1] == ticket), None)

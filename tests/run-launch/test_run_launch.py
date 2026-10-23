@@ -1177,6 +1177,125 @@ class DesktopExampleRegexTests(LauncherCase):
         self.assertIn("intake:    %s/SMPL-482-export-csv/INTAKE.md\n" % self.runs_root, out)
 
 
+
+class TicketlessTests(LauncherCase):
+    """TL rows (BEHAVIORS.md): under the desktop example's ticket shape, a run.json with no ticket takes the session
+    directory's name as its unit id, held to the install's unit form, and a Worker launch still names its project."""
+
+    def setUp(self):
+        super().setUp()
+        self.unit = json.loads(DESKTOP_EXAMPLE.read_text())["unit"]
+        self.given_launch_json(dict(LAUNCH_CONFIG, unit=self.unit))
+        self.accounting = self.root / "accounting"
+        self.env["ROBOWRIGHT_ACCOUNTING_ROOT"] = str(self.accounting)
+        self.set_stub(
+            'printf "%%s\\n" "$@" >> "%s"\n'
+            'printf \'{"sessionId": "%s", "cwd": "%%s"}\\n\' "$PWD" > "$HOME/.claude/sessions/bbbb2222.json"\n'
+            'echo "backgrounded · bbbb2222 · worker"' % (self.stub_calls, NEW_ID))
+
+    def given_session_dir(self, name):
+        self.run_dir = self.runs_root / name
+        self.run_dir.mkdir(exist_ok=True)
+
+    def refusal(self, out):
+        return next((line for line in out.splitlines() if line.startswith("refusing:")), "")
+
+    def index_lines(self):
+        path = self.accounting / "launches.jsonl"
+        return [json.loads(line) for line in path.read_text().splitlines() if line.strip()] if path.is_file() else []
+
+    def test_launcher__a_session_with_no_ticket_launches_under_a_ticket_shape_named_by_its_directory(self):
+        """TL-1: the Owner's decision (allow no ticket) — no ticket falls back to the directory-name unit form."""
+        self.given_worktree()
+        self.given_run(ticket=None, project="sample", model="opus")
+
+        code, out = self.plan()
+        self.assertEqual(code, 0, out)
+        self.assertIn("(sample-001-x, phase", out)
+
+        argv, out = self.start()
+        self.assertEqual(argv[argv.index("--name") + 1], "worker-opus-sample-001-x", out)
+        lines = self.index_lines()
+        self.assertEqual([(line["unit"], line["project"]) for line in lines], [("sample-001-x", "sample")], lines)
+
+    def test_launcher__a_malformed_ticket_is_still_refused_where_no_ticket_is_accepted(self):
+        """TL-2: the Owner's decision — a ticket that is present but malformed is still refused; no ticket launches."""
+        self.given_worktree()
+        for ticket in ("sample-001-x", "ABC-1/../../../x"):
+            with self.subTest(ticket=ticket):
+                self.given_run(ticket=ticket, project="sample")
+                code, out = self.plan()
+                self.assertEqual(code, 1, out)
+                self.assertIn("run.json", self.refusal(out), out)
+                self.assertIn("ticket", self.refusal(out), out)
+                self.assertNotIn("command:", out)
+        self.given_run(ticket=None, project="sample")
+        code, out = self.plan()
+        self.assertEqual(code, 0, out)
+
+    def test_launcher__a_ticketless_worker_launch_outside_every_group_needs_run_json_project(self):
+        """TL-3: a ticket-less session must still be attributed to its project; with no ticket shape, a no-match
+        launch goes on with project null as before."""
+        self.given_worktree()
+        self.given_session_dir("export-csv")
+        # A project that is not a string names no project to any reader, so it counts as none.
+        for project in (None, 7, ["sample"]):
+            with self.subTest(project=project):
+                self.given_run(ticket=None, project=project)
+                code, out = self.plan()
+                self.assertEqual(code, 1, out)
+                self.assertIn("run.json.project", self.refusal(out), out)
+                self.assertIn("group_regex", self.refusal(out), out)
+                self.assertNotIn("command:", out)
+
+        self.given_run(ticket=None, project="sample")
+        code, out = self.plan()
+        self.assertEqual(code, 0, out)
+
+        self.given_launch_json(dict(LAUNCH_CONFIG, unit=dict(self.unit, ticket_regex=None, ticket_example=None)))
+        self.given_run(ticket=None, project=None)
+        code, out = self.plan()
+        self.assertEqual(code, 0, out)
+        self.assertIsNone(self.run_json()["project"])
+
+    def test_launcher__a_ticketless_session_dir_in_a_group_takes_its_project_from_the_capture(self):
+        """TL-4: a ticket-shaped directory name is unchanged — the group capture names the project."""
+        self.given_worktree()
+        self.given_session_dir("SMPL-482-export-csv")
+        self.given_run(ticket=None, project=None)
+
+        self.start()
+
+        self.assertEqual(self.run_json()["project"], "SMPL")
+
+    def test_launcher__planner_brief_takes_no_ticket_under_a_ticket_shape(self):
+        """TL-5: --ticket is optional; with none the session dir is <root>/<slug>, and a bare slug in no group
+        inherits no intake."""
+        (self.runs_root / "SMPL-482-export-csv").mkdir()
+        (self.runs_root / "SMPL-482-export-csv/INTAKE.md").write_text("intake\n")
+        self.given_project()
+
+        code, out = self.doc_plan("--planner", "brief", "--slug", "import-csv")
+
+        self.assertEqual(code, 0, out)
+        self.assertIn("import-csv → %s/import-csv\n" % self.runs_root, out)
+        self.assertIn("--name planner-import-csv ", out)
+        self.assertIn("intake:    none found", out)
+
+    def test_launcher__a_session_dir_neither_a_slug_nor_ticket_slug_is_still_refused(self):
+        """TL-7: a ticket-less name passes exactly the checks a no-regex install's name passes (SI-11)."""
+        self.given_worktree()
+        self.given_session_dir("Not-A-Unit_x")
+        self.given_run(ticket=None, project="sample")
+
+        code, out = self.plan()
+
+        self.assertEqual(code, 1, out)
+        self.assertIn("run.json", self.refusal(out), out)
+        self.assertIn("'Not-A-Unit_x'", self.refusal(out), out)
+        self.assertNotIn("command:", out)
+
+
 REPO = Path(__file__).resolve().parents[2]
 # A model value that closes the JSON string it is written into: enough to show the shape check, no payload.
 QUOTED_MODEL = 'claude-x","z":{"a'
@@ -2530,7 +2649,8 @@ class DirectLaunchTests(LauncherCase):
     build in it, every argv value held to its shape first."""
 
     def setUp(self):
-        super().setUp()
+        # Named, not super(): TicketlessDirectTests borrows this setUp without inheriting the DL tests.
+        LauncherCase.setUp(self)
         self.projects = self.root / "owner-projects"
         self.repo = self.root / "repo"
         subprocess.run(GIT + ["init", "-q", str(self.repo)], check=True, capture_output=True)
@@ -2913,6 +3033,34 @@ class DirectLaunchTests(LauncherCase):
         worktree.parent.mkdir()
         subprocess.run(GIT + ["worktree", "add", "-q", "-b", "robowright/sample-001-x", str(worktree)], cwd=self.repo, check=True, capture_output=True)
         self.given_run(worktree=str(worktree))
+
+
+class TicketlessDirectTests(LauncherCase):
+    """TL-6 (BEHAVIORS.md): DL's fixture and helpers, borrowed so the DL tests do not run twice, under the desktop
+    example's ticket shape."""
+
+    with_projects_root = DirectLaunchTests.with_projects_root
+    given_registering_stub = DirectLaunchTests.given_registering_stub
+    rev = DirectLaunchTests.rev
+    values = DirectLaunchTests.values
+    direct = DirectLaunchTests.direct
+    started_argv = DirectLaunchTests.started_argv
+    worktree_adds = DirectLaunchTests.worktree_adds
+    assert_refused = DirectLaunchTests.assert_refused
+
+    def setUp(self):
+        DirectLaunchTests.setUp(self)
+        config = json.loads((self.home / ".claude/robowright/launch.json").read_text())
+        self.given_launch_json(dict(config, unit=json.loads(DESKTOP_EXAMPLE.read_text())["unit"]))
+
+    def test_direct__a_plain_slug_is_a_unit_name_under_a_ticket_shape(self):
+        """TL-6: in_unit_form accepts a plain slug (TICKET_FORM, then SLUG_REGEX) when the regex is set; DL-4."""
+        code, out = self.direct("--dry-run", slug="export-csv")
+        self.assertEqual(code, 0, out)
+        self.assertIn("worktree add -b robowright/export-csv %s/.worktrees/export-csv " % self.repo, out)
+
+        code, out = self.direct("--dry-run", slug="Not-A-Unit_x")
+        self.assert_refused(code, out, "--slug")
 
 
 if __name__ == "__main__":
