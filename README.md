@@ -99,6 +99,8 @@ use a second clone. `SECURITY.md` → The recommended setup has the rest, step b
 - name the root in `launch.json`'s `desktop_roots`, and put `rw-git *` in `sandbox.excludedCommands` and
   `Bash(rw-git *)` in `permissions.allow`;
 - run `git config --global safe.bareRepository explicit` and `git config --global core.fsmonitor false`;
+- deny `~/.local/bin`, `~/Library/LaunchAgents`, `~/.ssh` and `~/.config/git` in your user settings, and never start
+  a session in your home folder, since a session started there is granted it whole;
 - the cost: a session started in a project folder or a repository gets none of the root's denies (measured with
   `claude -p`; Desktop sessions below the root are unmeasured);
 - the limit: code an agent writes that you later build or run runs as you.

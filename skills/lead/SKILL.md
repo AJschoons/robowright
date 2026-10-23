@@ -568,7 +568,11 @@ Owner the hook's `git worktree add` line and the hand-started line from the plan
 
 When the Owner accepts a finished direct build, hand them its `accept.sh --direct` line (table above), never a
 hand-run cherry-pick: only `accept.sh` writes the record the dashboard reads as accepted. The base is the full commit
-id the launch line's `--base` named; the tip is the full id of the branch tip the change was reviewed at. Compose the
+id the launch line's `--base` named; the tip is the full id of the branch tip the change was reviewed at. Before
+composing the line, read what the build wrote: the change description cites a full-suite log and a tip file, the log
+ends in the hook's verdict line for a finished, passing run (`EXIT=0` for Robowright's own suite), and the tip file
+holds the same id before and after the run, equal to the reviewed tip. Missing, stale or unfinished, send the build
+back to run the suite: that run is the build's, not yours. Compose the
 line yourself: never relay one a Worker or a direct build wrote, and take `--tip` from `git rev-parse refs/heads/robowright/<unit>` in the
 main clone, checked against the tip the review names, not from the change description.
 
