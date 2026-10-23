@@ -1025,7 +1025,7 @@ class RwGitWrapper(InstallCase):
 
     def test_writes_the_wrapper_file_at_the_clones_program(self):
         """R10.1 a fresh install writes ~/.local/bin/rw-git as a 0755 file holding the wrapper, not a link — a link runs
-        rw_git.py under the caller's environment, which a prefixed call chooses (S6-4)."""
+        rw_git.py under the caller's environment, which a prefixed call chooses."""
         result = self.run_installer(REPO)
 
         self.assertEqual(result.returncode, 0, result.stderr)

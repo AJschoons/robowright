@@ -408,7 +408,34 @@ second folder, `~/Code-Trusted`, that none of them grants to a session.
    bare repository, so this closes that route (git 2.38 or later). `git config --global core.fsmonitor false` says
    what you mean, but a repository's own `core.fsmonitor` still wins over it; the leaf deny is what keeps a session
    from writing one.
-7. **Keep `rw-git` where no session writes** (→ rw-git).
+7. **Deny, in your user settings, the folders whose contents run as you.** `~/.local/bin` holds `rw-git`, which runs
+   as you outside the sandbox (→ rw-git), `~/Library/LaunchAgents` the launchd agents macOS starts as you, `~/.ssh`
+   your SSH keys, and `~/.config/git` the configuration every git you run reads. A session started in your home folder
+   is granted all four, and the sandbox's [protected paths](https://code.claude.com/docs/en/sandboxing#protected-paths)
+   cover none of them: shell startup files and `.gitconfig` in the working directory only, and most of `~/.claude`.
+   A project's settings load only for a session started in its folder (step 2), while Claude Code merges settings
+   lists across scopes (step 5), so put these denies in your user settings, each written twice (step 3; neither form
+   was probed on these four folders):
+
+   ```json
+   {
+     "permissions": {
+       "deny": ["Edit(~/.local/bin)", "Edit(~/.local/bin/**)",
+                "Edit(~/Library/LaunchAgents)", "Edit(~/Library/LaunchAgents/**)",
+                "Edit(~/.ssh)", "Edit(~/.ssh/**)",
+                "Edit(~/.config/git)", "Edit(~/.config/git/**)"]
+     },
+     "sandbox": {
+       "filesystem": {"denyWrite": ["~/.local/bin", "~/Library/LaunchAgents", "~/.ssh", "~/.config/git"]}
+     }
+   }
+   ```
+
+   Never start a session in your home folder: it is granted whole, and in the sandbox these denies are the only thing
+   between it and these folders. `role-start` refuses a grant at or above your home folder, but a session the Desktop
+   app starts does not go through `role-start`. The cost: re-running the onboarding's link step (`/robowright-onboard`
+   step 6), which writes `~/.local/bin`, is no longer a session's to do; your own terminal still can. Keep `rw-git`
+   where no session writes (→ rw-git).
 
 **What it costs.**
 

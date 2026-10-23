@@ -549,7 +549,7 @@ class AllowlistTests(OwnerGitCase):
 
     def test_check__a_robowright_json_that_is_a_link_trusts_nothing(self):
         """O38 · when the only robowright.json naming the allowlisted repository is a symlink to a file outside the
-        projects root, it is skipped: the worktree is refused worktree-unlisted (U52b B3, S6-5)."""
+        projects root, it is skipped: the worktree is refused worktree-unlisted (U52b B3)."""
         outside = self.root / "outside"
         outside.mkdir()
         settings = self.projects / "sample" / "robowright.json"
@@ -563,7 +563,7 @@ class AllowlistTests(OwnerGitCase):
 
     def test_check__a_robowright_json_that_is_a_fifo_is_skipped_at_once(self):
         """O39 · another project's robowright.json a FIFO is skipped within seconds, and the listed worktree is
-        accepted: the read waited on it for a writer that never comes (U52b B3, S6-5)."""
+        accepted: the read waited on it for a writer that never comes (U52b B3)."""
         (self.projects / "hostile").mkdir()
         os.mkfifo(self.projects / "hostile" / "robowright.json")
 
@@ -619,7 +619,7 @@ class HardenedArgvTests(OwnerGitCase):
     def test_flags__turns_off_each_config_hook_by_name(self):
         """O40 · with config hooks `probe` and `a=b` in the repository, `flags <repo>` adds one
         `--config-env=hook.<name>.enabled=OWNER_GIT_FALSE` for each — core.hooksPath=/dev/null leaves them running
-        (git 2.54), and `-c hook.a=b.enabled=false` splits at the first `=` (U52b C3, S6-2)."""
+        (git 2.54), and `-c hook.a=b.enabled=false` splits at the first `=` (U52b C3)."""
         self.given_config_hooks("post-checkout")
 
         done = subprocess.run([sys.executable, str(TOOL), "flags", str(self.repo)], capture_output=True, text=True,
@@ -644,7 +644,7 @@ class HardenedArgvTests(OwnerGitCase):
 
     def test_run__a_worktree_add_runs_no_config_hook(self):
         """O41 · `owner_git.run(repo, "worktree", "add", …)`, as the launcher's role_grants makes a worktree, with
-        post-checkout config hooks `probe` and `a=b`: the worktree is made and no marker exists (U52b C4, S6-2)."""
+        post-checkout config hooks `probe` and `a=b`: the worktree is made and no marker exists (U52b C4)."""
         markers = self.given_config_hooks("post-checkout")
         sys.path.insert(0, str(HERE))
         import owner_git

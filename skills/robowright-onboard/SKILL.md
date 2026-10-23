@@ -166,6 +166,10 @@ ln -s ~/.claude/skills/robowright/scripts/claude-usage ~/.local/bin/claude-usage
 ln -s ~/.claude/skills/robowright/scripts/usage-guard ~/.local/bin/usage-guard
 ```
 
+When a write to `~/.local/bin` is refused (`SECURITY.md` → The recommended setup, step 7 has the
+builder deny it), print the block above for the builder to run in their own terminal; once they
+say it ran, run the "Done when" check below again.
+
 An `ln` that says the file exists has found something of the builder's at that path: show
 what it is, and leave it for the builder. When `~/.local/bin` is not on `PATH`
 (`case ":$PATH:" in *":$HOME/.local/bin:"*)`), tell the builder; their shell's startup file is

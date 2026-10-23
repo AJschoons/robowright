@@ -1097,7 +1097,7 @@ from: briefed, released: []}`.
 
 ## 052b · a robowright.json read without following a link or waiting on a FIFO
 
-From U52b (final-fixes-b), a direct build. S6-5 and B3: the dashboard's `project_settings` and `owner_git.named_repos`
+From U52b (final-fixes-b), a direct build. B3: the dashboard's `project_settings` and `owner_git.named_repos`
 read a project's `robowright.json` through `owner_git.read_unlinked`, which a Planner or a granted Worker can make a
 link or a FIFO. A refused read is what an unreadable file was: `{}` for the dashboard, the folder skipped for
 `named_repos`.
@@ -1105,7 +1105,7 @@ link or a FIFO. A refused read is what an unreadable file was: `{}` for the dash
 | # | Area | Given | When | Then | Source | Test |
 |---|---|---|---|---|---|---|
 | 052b-R1 | linked settings | `sample`'s robowright.json a symlink to a file outside the project holding `{"owner_brief": true}`; SLUG finished, through intake, no owner brief | `--once <out>` | U1's state begins `Awaiting acceptance`, not held for an owner brief | briefing B3: "the dashboard reads `{}`" for a refused read | `test_ignores_a_robowright_json_that_is_a_link__to_a_file_outside_the_project` |
-| 052b-R2 | FIFO settings | launch.json's `repos` set; `sample`'s robowright.json a FIFO; SLUG implementing | `--once <out>`, under a 20 s timeout | exit 0 within the timeout; `sample.html` written | briefing B3, S6-5: denial of service only | `test_writes_every_page_at_once__when_a_projects_robowright_json_is_a_fifo` |
+| 052b-R2 | FIFO settings | launch.json's `repos` set; `sample`'s robowright.json a FIFO; SLUG implementing | `--once <out>`, under a 20 s timeout | exit 0 within the timeout; `sample.html` written | briefing B3: denial of service only | `test_writes_every_page_at_once__when_a_projects_robowright_json_is_a_fifo` |
 
 ## 057 · a direct build shown beside a session folder with no run.json
 

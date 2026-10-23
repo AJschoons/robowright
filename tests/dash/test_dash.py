@@ -7015,7 +7015,7 @@ class FinalTrims(GlyphScratch):
 
     def test_ignores_a_robowright_json_that_is_a_link__to_a_file_outside_the_project(self):
         """052b-R1 — `sample`'s robowright.json a symlink to a file outside asking for an owner brief is read as `{}`:
-        SLUG, finished and through intake with no owner brief, reads awaiting acceptance (U52b B3, S6-5)."""
+        SLUG, finished and through intake with no owner brief, reads awaiting acceptance (U52b B3)."""
         folder = self.given_project()
         outside = self.base / "outside"
         outside.mkdir()
@@ -7032,7 +7032,7 @@ class FinalTrims(GlyphScratch):
     def test_writes_every_page_at_once__when_a_projects_robowright_json_is_a_fifo(self):
         """052b-R2 — a FIFO at `sample`'s robowright.json, with launch.json's `repos` set so `named_repos` reads it
         too: `--once` exits 0 within seconds and writes the project's page; a read waited on it for a writer that
-        never comes (U52b B3, S6-5)."""
+        never comes (U52b B3)."""
         self.given_allowlisted(self.base / "repo")
         folder = self.given_project()
         (folder / "robowright.json").unlink(missing_ok=True)

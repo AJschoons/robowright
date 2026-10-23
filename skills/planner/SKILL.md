@@ -515,7 +515,7 @@ All templates are siblings of this file:
 
 ## Planner kickoff (copy-paste this to start a new project)
 
-The Planner runs on **Fable** by default — planning is a few hundred requests with a lot of judgment each, which is where the most capable model pays for itself (`robowright/DESIGN.md` §4). `robowright.json` does not exist yet at kickoff, so this first session names the model itself; every later Planner session takes it from the file. Start the session in the project folder, in the shape the profile's **Launch** section gives, named `planner-<project>`, then paste:
+The Planner runs on **Fable** by default — planning is a few hundred requests with a lot of judgment each, which is where the most capable model pays for itself (`robowright/DESIGN.md` §4). `robowright.json` does not exist yet at kickoff, so this first session names the model itself; every later Planner session takes it from the file. Start the session with `role-start planner` and no project, which starts it in the projects root (`role-start` refuses a project with no `robowright.json`), in the shape the profile's **Launch** section gives, named `planner-<project>`, then paste:
 
 > Run the `planner` skill from scratch for project `<project>`. Inputs: time box = `<X weeks or none>`, designs = `<link or N/A>`, prior discussion = `<links or N/A>`, related tracker items = `<comma list or N/A>`, related docs = `<paths/links or N/A>`. Start with Phase 1; ask me for anything missing before proceeding.
 

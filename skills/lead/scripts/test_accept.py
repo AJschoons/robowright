@@ -315,7 +315,7 @@ class TipTests(AcceptCase):
 
     def test_accept__no_tip_is_refused_before_anything_is_read(self):
         """L40 no --tip, with no --message and no run.json either, is refused tip-missing, and nothing changes — an
-        accept without it integrates whatever the branch holds when the Owner runs the line (S6-6)."""
+        accept without it integrates whatever the branch holds when the Owner runs the line."""
         (self.dir / "run.json").unlink()
         self.assert_refused("tip-missing", message=None, tip=None)
 
@@ -363,7 +363,7 @@ class MessageFileTests(AcceptCase):
 
     def test_accept__refused_when_the_message_file_is_a_link_and_never_prints_its_target(self):
         """L11.1 a message file that is a symlink to a file outside the session's folders is refused message-unreadable,
-        nothing on main, and the target's text is printed nowhere — it became main's commit message (S6-3)."""
+        nothing on main, and the target's text is printed nowhere — it became main's commit message."""
         target = self.root / "outside" / "kept.txt"
         target.parent.mkdir()
         target.write_text("STAND-IN-TEXT-OUTSIDE (not a message)\n")
@@ -379,7 +379,7 @@ class MessageFileTests(AcceptCase):
 
     def test_accept__refused_at_once_when_the_message_file_is_a_fifo(self):
         """L11.2 a FIFO at the message path is refused message-unreadable within seconds — `cat` waited on it for a
-        writer that never comes (S6-3)."""
+        writer that never comes."""
         fifo = self.unit_folder / "commit-message.txt"
         os.mkfifo(fifo)
         before = self.snapshot()
@@ -452,7 +452,7 @@ class MessagePlaceTests(AcceptCase):
 
 class ConfigHookTests(AcceptCase):
     """L30 · the fast-forward runs no config hook (git 2.54's `hook.<name>.*`), which core.hooksPath=/dev/null leaves
-    running, a name holding `=` included (U52b C4, S6-2)."""
+    running, a name holding `=` included (U52b C4)."""
 
     def given_config_hooks(self, repo, event):
         markers = self.root / "markers"
@@ -805,7 +805,7 @@ class DirectRefusalTests(DirectCase):
 
     def test_direct__a_branch_past_the_tip_is_refused_naming_both_ids(self):
         """X30 --direct, a commit added on the branch after the line was composed: tip-moved naming both ids, and nothing
-        written — --direct keeps no phase guard, so --tip is what pins the reviewed commit (S6-6)."""
+        written — --direct keeps no phase guard, so --tip is what pins the reviewed commit."""
         composed = self.given_tip_moved()
         err = self.assert_direct_refused("tip-moved", tip=composed)
         self.assertIn(composed, err)

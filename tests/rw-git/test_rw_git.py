@@ -1623,7 +1623,7 @@ class DailyTests(RwGitCase):
 
     def test_unmanaged__main_is_protected_by_default(self):
         """D3 · desk/notes-app on main, no `protected_branches`: commit, commit --amend and push main are
-        branch-protected and HEAD stays (U52b D1, S6-1)."""
+        branch-protected and HEAD stays (U52b D1)."""
         repo = self.notes_app()
         (repo / "f").write_text("x\n")
         self.ok("add", "f", cwd=repo)
@@ -1657,7 +1657,7 @@ class DailyTests(RwGitCase):
 
     def test_unmanaged__a_list_naming_main_still_protects_develop(self):
         """D37 · protected_branches lists only main: commit on develop is branch-protected — a list replaced the
-        default, so naming main unprotected develop (U52b D2, S6-1)."""
+        default, so naming main unprotected develop (U52b D2)."""
         repo = self.notes_app("develop")
         self.protect(repo, ["main"])
         (repo / "f").write_text("x\n")
@@ -1752,7 +1752,7 @@ class DailyTests(RwGitCase):
     def test_unmanaged__a_branch_a_remote_tracks_is_never_reset_or_lease_pushed(self):
         """R38 · desk/notes-app, an origin and a draft-pr hook: on feature, which origin/feature holds, and on local,
         whose upstream is origin/other, `reset --soft <base>` and `push --force-with-lease` are branch-tracked and
-        neither HEAD nor origin moves; on solo, tracked by nothing, both exit 0 (U52b D3, S6-1)."""
+        neither HEAD nor origin moves; on solo, tracked by nothing, both exit 0 (U52b D3)."""
         repo = self.notes_app()
         origin = self.root / "notes-origin.git"
         self.git(self.root, "init", "-q", "--bare", "-b", "main", str(origin))
