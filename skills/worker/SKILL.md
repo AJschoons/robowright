@@ -122,7 +122,12 @@ Only the first ~5k tokens of this file survive compaction. These eight rules are
    switch, reset, rebase, cherry-pick, stash, fetch, push (`rw-git --help`). Your sandbox denies the git
    directory, and rw-git runs outside it, refusing any branch but yours. In your managed worktree
    that is all of it; a main checkout under a granted folder writes any branch its
-   `protected_branches` does not protect, which is a session the Owner starts there, never yours. Reads stay plain `git`. `git merge-base --is-ancestor <base_sha> HEAD` before every build. A rebase onto a
+   `protected_branches` does not protect, which is a session the Owner starts there, never yours. Reads stay plain `git`.
+   When your shell's working directory cannot be the worktree (a `cd` outside the session's folders does not stick
+   in the desktop app), every `rw-git` call is `rw-git --dir <worktree> …`; run `rw-git --dir <worktree> where` once
+   at Phase 0, before the first write, and stop with `verification-failed` unless its `worktree:` line is that
+   worktree.
+   `git merge-base --is-ancestor <base_sha> HEAD` before every build. A rebase onto a
    moved base happens only after a `Decided (Lead)` or Owner ledger entry says to, and is
    recorded before the next commit: `state rebase --base <new base> --head <new tip> --by
    <lead|owner> --decision <text>`, with `--unit-heads U1=<sha>,…` for every done unit whose
@@ -210,7 +215,8 @@ work around it.
    parent folder (a desktop scheduled task starts in its creator's folder, not the worktree).
    Runs on resume too. Skip it when `pwd` is already inside the brief's worktree.
    - `cd <worktree>` as its own Bash call, once the worktree exists (step 4 creates it when the
-     brief says to), and again whenever a Bash result says the shell cwd was reset. This one
+     brief says to), and again whenever a Bash result says the shell cwd was reset. Where that `cd` does not
+     stick, rw-git takes `--dir <worktree>` instead (rule 5). This one
      `cd` is how relative build paths and plain `git` resolve; rule 8's `cd` ban is about the
      per-command kind.
    - The repository's own instructions did not load: read `<worktree>/CLAUDE.md`,

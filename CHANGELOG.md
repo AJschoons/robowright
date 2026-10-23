@@ -13,3 +13,8 @@ floors; the Explainer (explainer) with its two modes.
 
 Landed 2026-09-19: every machine fact behind `~/.claude/robowright/profile.md` and every
 platform fact behind the project hook; the extension points `skills/robowright/SKILL.md` lists, all but `reviewer.overlay`.
+
+Landed 2026-10-22: `rw-git --dir <path> <form>`, the worktree resolved from `<path>` instead of the working
+directory, through the same checks, since a `cd` outside a desktop-app session's folders does not stick;
+`rw-git where`, printing the worktree, repository, git directory, kind and HEAD it resolved; and
+`rw-git switch --detach <full id>`, with `switch <branch>` as the way back.

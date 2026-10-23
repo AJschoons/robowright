@@ -2836,5 +2836,301 @@ class ShippedProtocolTests(RwGitCase):
         self.assertEqual(self.git(self.repo, "for-each-ref", "refs/remotes"), before)
 
 
+class ExplicitWorktreeTests(RwGitCase):
+    """U63: `--dir <path>` names the worktree. Every call runs from a plain folder outside every listed checkout, as a
+    desktop-app background task's shell does."""
+
+    def setUp(self):
+        super().setUp()
+        self.outside = self.root / "outside"
+        self.outside.mkdir()
+
+    def ok_at(self, where, *args, **kwargs):
+        return self.ok("--dir", str(where), *args, cwd=self.outside, **kwargs)
+
+    def refused_at(self, code_name, where, *args):
+        return self.refused(code_name, "--dir", str(where), *args, cwd=self.outside)
+
+    def git_files(self):
+        """{path: (size, mtime)} for every file in the shared git directory but rw-git.lock."""
+        common = self.repo / ".git"
+        return {str(path.relative_to(common)): (path.stat().st_size, path.stat().st_mtime_ns)
+                for path in common.rglob("*") if path.is_file() and path.name != "rw-git.lock"}
+
+    def test_where__prints_the_worktree_dir_names(self):
+        """X1 · `--dir <worktree> where` from outside: exit 0, the five lines naming the managed worktree."""
+        git_dir = self.git(self.worktree, "rev-parse", "--absolute-git-dir")
+
+        out = self.ok_at(self.worktree, "where")
+
+        self.assertEqual(out.splitlines(), [f"worktree: {self.worktree}", f"repository: {self.repo}",
+                                            f"git-dir: {git_dir}", f"kind: managed {SLUG}", f"head: {BRANCH}"])
+
+    def test_where__without_dir_is_refused_as_today(self):
+        """X2 · `where` from outside, no `--dir`: worktree-unlisted with W7.1's text — the cwd still decides alone."""
+        err = self.refused("worktree-unlisted", "where", cwd=self.outside)
+
+        self.assertIn(str(self.outside), err)
+        self.assertIn("`repos`", err)
+        self.assertIn("`desktop_roots`", err)
+
+    def test_where__writes_nothing_in_the_git_directory(self):
+        """X3 · `--dir <worktree> where`: every git directory file but rw-git.lock unchanged — where is read-only."""
+        self.ok_at(self.worktree, "where")
+        before = self.git_files()
+        time.sleep(0.01)
+
+        self.ok_at(self.worktree, "where")
+
+        self.assertEqual(self.git_files(), before)
+
+    def test_add__dir_serves_it_as_the_working_directory_did(self):
+        """X4 · `--dir <worktree> add f` from outside: f staged, exit 0, as W1."""
+        (self.worktree / "f").write_text("x\n")
+
+        self.ok_at(self.worktree, "add", "f")
+
+        self.assertEqual(self.staged(), ["f"])
+
+    def test_commit__dir_serves_it_as_the_working_directory_did(self):
+        """X5 · `--dir <worktree> commit --message-file` from outside: one commit on the branch, as S4."""
+        (self.worktree / "f").write_text("x\n")
+        self.git(self.worktree, "add", "f")
+        parent = self.head()
+
+        self.ok_at(self.worktree, "commit", "--message-file", str(self.given_message("sample: from outside\n")))
+
+        self.assertEqual(self.git(self.worktree, "log", "-1", "--format=%an <%ae>|%P|%s"),
+                         f"{NAME} <{EMAIL}>|{parent}|sample: from outside")
+        self.assertEqual(self.branch(), BRANCH)
+
+    def test_switch__dir_serves_create_and_return(self):
+        """X6 · `--dir <worktree> switch -c <slug>-u2`, then `switch <slug>`: on each in turn, as S5, S6."""
+        self.ok_at(self.worktree, "switch", "-c", f"{BRANCH}-u2")
+        self.assertEqual(self.branch(), f"{BRANCH}-u2")
+
+        self.ok_at(self.worktree, "switch", BRANCH)
+
+        self.assertEqual(self.branch(), BRANCH)
+
+    def test_rebase__dir_serves_it_as_the_working_directory_did(self):
+        """X7 · `--dir <worktree> rebase <base>` from outside: parented on the base, the old tip named, as S7."""
+        self.commit_in(self.worktree, "f", "x\n", "branch work")
+        old = self.head()
+        base = self.commit_in(self.repo, "g", "y\n", "main moved")
+
+        out = self.ok_at(self.worktree, "rebase", base)
+
+        self.assertEqual(self.git(self.worktree, "rev-parse", "HEAD~1"), base)
+        self.assertIn(old, out)
+
+    def test_add__a_dir_out_of_shape_is_refused_as_usage(self):
+        """X8 · a relative, `-C`, `..`, `//`, trailing-`/` or `.` --dir, a repeated one, one after the verb, one with no
+        value, one before --help: usage each, nothing staged — the path is held to its shape before anything runs."""
+        (self.worktree / "f").write_text("x\n")
+        w = str(self.worktree)
+        for args in ([f"--dir", os.path.relpath(w, self.outside), "add", "f"], ["--dir", "-C", "add", "f"],
+                     ["--dir", f"{w}/../{SLUG}", "add", "f"], ["--dir", w.replace("/repos/", "/repos//"), "add", "f"],
+                     ["--dir", f"{w}/", "add", "f"], ["--dir", f"{w}/.", "add", "f"],
+                     ["--dir", w, "--dir", w, "add", "f"], ["add", "--dir", w, "f"], ["where", "--dir", w],
+                     ["--dir"], ["--dir", w, "--help"]):
+            with self.subTest(args=args):
+                self.refused("usage", *args, cwd=self.outside)
+        self.assertEqual(self.staged(), [])
+
+    def test_add__a_dir_naming_a_subdirectory_of_a_worktree_is_refused(self):
+        """X9 · `--dir <worktree>/sub`: worktree-unlisted, nothing staged, as W4 — the check compares the whole path."""
+        (self.worktree / "sub").mkdir()
+        (self.worktree / "sub" / "f").write_text("x\n")
+
+        self.refused_at("worktree-unlisted", self.worktree / "sub", "add", "f")
+
+        self.assertEqual(self.staged(), [])
+
+    def test_add__a_dir_naming_an_unlisted_repository_is_told_what_rw_git_serves(self):
+        """X10 · `--dir <a repository repos does not list>`: worktree-unlisted with W7.1's text."""
+        other = self.given_repo(self.root / "repos" / "other")
+        (other / "f").write_text("x\n")
+
+        err = self.refused_at("worktree-unlisted", other, "add", "f")
+
+        self.assertIn(str(other), err)
+        self.assertIn("`repos`", err)
+        self.assertIn("`desktop_roots`", err)
+        self.assertIn("granted folder", err)
+        self.assertEqual(self.staged(other), [])
+
+    def test_where__the_main_checkout_is_unmanaged_and_served(self):
+        """X11 · `--dir <repo> where`: kind unmanaged, head main; `--dir <repo> add f` stages f there, as W2."""
+        (self.repo / "f").write_text("x\n")
+
+        out = self.ok_at(self.repo, "where")
+        self.ok_at(self.repo, "add", "f")
+
+        self.assertEqual(out.splitlines()[:2], [f"worktree: {self.repo}", f"repository: {self.repo}"])
+        self.assertEqual(out.splitlines()[3:], ["kind: unmanaged", "head: main"])
+        self.assertEqual(self.staged(self.repo), ["f"])
+
+    def test_where__a_worktree_at_the_old_place_is_managed(self):
+        """X12 · `--dir <repo>/.claude/worktrees/<slug> where`: kind managed <slug>, as W8."""
+        legacy = self.given_worktree(self.repo, f".claude/worktrees/{OTHER_SLUG}", OTHER_BRANCH)
+
+        out = self.ok_at(legacy, "where")
+
+        self.assertIn(f"kind: managed {OTHER_SLUG}", out.splitlines())
+
+    def test_where__a_dir_through_a_link_prints_the_canonical_worktree(self):
+        """X13 · `--dir <a link to the worktree> where`: served, the worktree's canonical path printed, never the
+        argument — the check is by canonical path, as for a working directory."""
+        link = self.root / "shortcut"
+        link.symlink_to(self.worktree)
+
+        out = self.ok_at(link, "where")
+
+        self.assertEqual(out.splitlines()[0], f"worktree: {self.worktree}")
+
+    # -- switch --detach ---------------------------------------------------------------------------------------------
+
+    def given_tip(self):
+        """(base, the branch one commit past it, that commit editing README)."""
+        base = self.head()
+        return base, self.commit_in(self.worktree, "README", "branch\n", "branch edit")
+
+    def test_switch__detach_puts_head_at_a_full_commit_id(self):
+        """X14 · `--dir <worktree> switch --detach <base>`: HEAD detached at base, `where` says so, the branch stays at
+        its tip."""
+        base, tip = self.given_tip()
+
+        self.ok_at(self.worktree, "switch", "--detach", base)
+
+        self.assertEqual((self.branch(), self.head()), ("", base))
+        self.assertEqual(self.ok_at(self.worktree, "where").splitlines()[4], f"head: detached {base}")
+        self.assertEqual(self.git(self.worktree, "rev-parse", BRANCH), tip)
+
+    def test_switch__an_own_branch_returns_from_a_detached_head(self):
+        """X15 · from X14's detached HEAD, `--dir <worktree> switch <own branch>`: on it, at its tip."""
+        base, tip = self.given_tip()
+        self.git(self.worktree, "switch", "-q", "--detach", base)
+
+        self.ok_at(self.worktree, "switch", BRANCH)
+
+        self.assertEqual((self.branch(), self.head()), (BRANCH, tip))
+
+    def test_switch__detach_takes_only_a_full_id_of_a_commit_here(self):
+        """X16 · `switch --detach` with a short id, the id in upper case, 40 hex naming nothing, a tree's id:
+        commit-unknown each, HEAD stays — a session's id never reaches git unchecked."""
+        base, tip = self.given_tip()
+        tree = self.git(self.worktree, "rev-parse", "HEAD^{tree}")
+
+        for commit in (base[:7], base.upper(), "ab" * 20, tree):
+            with self.subTest(commit=commit):
+                self.refused_at("commit-unknown", self.worktree, "switch", "--detach", commit)
+        self.assertEqual((self.branch(), self.head()), (BRANCH, tip))
+
+    def test_switch__detach_takes_exactly_one_id(self):
+        """X17 · `switch --detach` with no id, two ids, or `--force` before the id: usage each."""
+        base, tip = self.given_tip()
+
+        for rest in ([], [base, tip], ["--force", base]):
+            with self.subTest(rest=rest):
+                self.refused_at("usage", self.worktree, "switch", "--detach", *rest)
+        self.assertEqual((self.branch(), self.head()), (BRANCH, tip))
+
+    def test_switch__detach_over_a_local_change_git_would_overwrite_fails(self):
+        """X18 · README edited, unstaged, and the base differs there: `switch --detach <base>` exits 1, the edit and
+        HEAD stay — git refuses to lose a local change."""
+        base, tip = self.given_tip()
+        (self.worktree / "README").write_text("unsaved\n")
+
+        code, _, err = self.rw("--dir", str(self.worktree), "switch", "--detach", base, cwd=self.outside)
+
+        self.assertEqual(code, 1, err)
+        self.assertEqual((self.worktree / "README").read_text(), "unsaved\n")
+        self.assertEqual((self.branch(), self.head()), (BRANCH, tip))
+
+    def test_commit__a_detached_head_is_refused_managed_and_unmanaged(self):
+        """X19 · the managed worktree, then the main checkout, each detached at base by `switch --detach`, a file
+        staged: `commit` is head-not-own, no new commit."""
+        base, _ = self.given_tip()
+        for where in (self.worktree, self.repo):
+            with self.subTest(where=where.name):
+                self.ok_at(where, "switch", "--detach", base)
+                (where / "f").write_text("x\n")
+                self.git(where, "add", "f")
+
+                self.refused_at("head-not-own", where, "commit", "--message-file", str(self.given_message()))
+
+                self.assertEqual(self.head(where), base)
+
+    def test_switch__detach_in_an_unmanaged_checkout_with_a_rebase_stopped_is_refused(self):
+        """X20 · the main checkout on feature, a conflicting rebase stopped: `switch --detach <base>` is head-not-own,
+        the rebase still stopped — as plain switch, finish or abort first."""
+        base = self.head(self.repo)
+        self.git(self.repo, "switch", "-q", "-c", "feature")
+        self.commit_in(self.repo, "README", "feature\n", "feature edit")
+        self.git(self.repo, "switch", "-q", "main")
+        moved = self.commit_in(self.repo, "README", "main\n", "main edit")
+        self.git(self.repo, "switch", "-q", "feature")
+        self.git(self.repo, "rebase", moved, check=False)
+
+        self.refused_at("head-not-own", self.repo, "switch", "--detach", base)
+
+        self.assertTrue((self.repo / ".git" / "rebase-merge").is_dir())
+
+    def test_switch__detach_over_an_ignored_file_the_target_tracks_fails(self):
+        """X22 · the base tracks notes.txt, the branch ignores it, the session has its own: `switch --detach <base>`
+        exits 1, the file and HEAD stay — git's default would overwrite an ignored file silently."""
+        base = self.commit_in(self.worktree, "notes.txt", "base\n", "track notes")
+        self.git(self.worktree, "rm", "-q", "--cached", "notes.txt")
+        (self.worktree / ".gitignore").write_text("notes.txt\n")
+        self.git(self.worktree, "add", ".gitignore")
+        self.git(self.worktree, "commit", "-q", "-m", "ignore notes")
+        tip = self.head()
+        (self.worktree / "notes.txt").write_text("mine\n")
+
+        code, _, err = self.rw("--dir", str(self.worktree), "switch", "--detach", base, cwd=self.outside)
+
+        self.assertEqual(code, 1, err)
+        self.assertEqual((self.worktree / "notes.txt").read_text(), "mine\n")
+        self.assertEqual((self.branch(), self.head()), (BRANCH, tip))
+
+    def test_where__a_refusal_names_the_dir_as_spelled(self):
+        """X23 · `--dir <a link to a plain folder> where`: worktree-unlisted naming the link, not its target — rw-git
+        resolves the path outside the sandbox, so printing the target would tell a session where a link leads."""
+        hidden = self.root / "hidden-target"
+        hidden.mkdir()
+        link = self.outside / "shortcut"
+        link.symlink_to(hidden)
+
+        err = self.refused_at("worktree-unlisted", link, "where")
+
+        self.assertIn(f"'{link}'", err)
+        self.assertNotIn(str(hidden), err)
+
+    def test_where__a_dir_in_another_letter_case_is_refused(self):
+        """X24 · the managed worktree and a desktop-root checkout, each spelled with one segment upper-cased: where and
+        add are worktree-unlisted, nothing staged — served, the protected_branches key would not match it."""
+        desk = self.root / "desk"
+        repo = self.given_repo(desk / "notes-app")
+        self.git(repo, "switch", "-q", "-c", "feature")
+        self.given_launch_json({"repos": [str(self.repo)], "sessions_root": str(self.sessions),
+                                "projects_root": str(self.projects), "desktop_roots": [str(desk)],
+                                "protected_branches": {str(repo): ["feature"]}})
+        for where, spelled in ((self.worktree, str(self.worktree).replace("/repos/", "/REPOS/")),
+                               (repo, str(repo).replace("/notes-app", "/NOTES-APP"))):
+            (where / "f").write_text("x\n")
+            for args in (["where"], ["add", "f"]):
+                with self.subTest(spelled=spelled, args=args):
+                    self.refused("worktree-unlisted", "--dir", spelled, *args, cwd=self.outside)
+            self.assertEqual(self.staged(where), [])
+
+    def test_help__names_dir_where_and_switch_detach(self):
+        """X21 · `rw-git --help`: names `--dir <path>`, `where` and `switch --detach` — the call shape a session learns."""
+        out = self.ok("--help", cwd=self.outside)
+
+        for words in ("rw-git --dir <path> <form>", "rw-git where", "rw-git switch --detach <commit>"):
+            self.assertIn(words, out)
+
+
 if __name__ == "__main__":
     unittest.main()

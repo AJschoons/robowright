@@ -491,3 +491,39 @@ argument`), so the unfixed line is its mutation.
 | # | Mutation | Predicted | Observed | Verdict |
 |---|---|---|---|---|
 | U58-E1 | `staged` passes `--` only when there are pathspecs | D40 | D40 | KILLED |
+
+## U63 · an explicit worktree: `--dir`, `where`, `switch --detach` (X1–X21)
+
+Each mutation applied to `rw_git.py` alone, `ExplicitWorktreeTests` run, then the file restored from a copy and
+compared; the red set predicted in writing before each run. Red before the code: X1, X2, X14, X16, X18 and X20 on their
+Then; X3 and X19 in their Given (`where` and the detach were not forms yet). Green when written, so each owed its kill
+first: X4–X13, since the peel that came with X1 serves every form and holds the shape; X15 and X17, which the existing
+`switch` and `parse` already met; X21, written after the docstring it reads.
+
+| # | Mutation | Predicted | Observed | Verdict |
+|---|---|---|---|---|
+| U63-1 | the peel drops `--dir`'s path, so the working directory decides | X1 X3 X4 X5 X6 X7 X10 X11 X12 X13 | the same | KILLED |
+| U63-2 | the peel's shape check dropped | X8 | X8 | KILLED |
+| U63-3 | `--dir` mapped to the main checkout above it | X9 | X9 X1 X3 X4 X5 X6 X7 X12 X13 | KILLED; mispredicted: a linked worktree maps to its main checkout too |
+| U63-4 | `--dir` walked up to the nearest folder holding a `.git`, as `git -C` discovers | X9 | X9 | KILLED |
+| U63-5 | without `--dir`, `locate` starts from the first `repos` entry | X2 | X2 | KILLED |
+| U63-6 | `known_commit` dropped from the detach | X16 | X16 | KILLED |
+| U63-7 | `--discard-changes` added to the detach | X18 | X18 | KILLED |
+| U63-8 | `unstopped` dropped from the detach | X20 | X20 | KILLED |
+| U63-9 | managed `switch` calls `own_head` first | X15 | X15 | KILLED |
+| U63-10 | `switch --detach` takes its last word whatever precedes it | X17 | X17 | KILLED |
+| U63-11 | managed `own_head` takes a detached HEAD | X19 (managed) | X19 (managed) | KILLED |
+| U63-12 | unmanaged `own_head` takes a detached HEAD | X19 (unmanaged) | X19 (unmanaged) | KILLED |
+| U63-13 | `where` prints `detached` without the id | X14 | X14 | KILLED |
+| U63-14 | `where` rewrites HEAD to the branch it names | X3 | X3 | KILLED |
+| U63-15 | the `switch --detach` line dropped from `--help` | X21 | X21 | KILLED |
+
+## U63 · review fix round (X22–X24)
+
+X22 and X23 were red before the fix, so the unfixed line is each one's mutation.
+
+| # | Mutation | Predicted | Observed | Verdict |
+|---|---|---|---|---|
+| U63-16 | the detach without `--no-overwrite-ignore` | X22 | X22 | KILLED |
+| U63-17 | the `worktree-unlisted` refusal prints the resolved path, not `--dir` as spelled | X23 | X23 | KILLED |
+| U63-18 | `--dir` resolved to the disk's letter case (`F_GETPATH`) | X24 | X24 X23 | KILLED; also red: X23, since `F_GETPATH` resolves the link too. X24 was green when written: it pins the refusal both reviews accepted |

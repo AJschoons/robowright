@@ -5,6 +5,11 @@ directory. The session's sandbox denies that directory; Claude Code runs `rw-git
 settings list it in `sandbox.excludedCommands`. So every value here comes from the session, and rw-git takes only
 the subcommands below, each held to its shape, and keeps git from running any program the repository names.
 
+    rw-git --dir <path> <form>                any form below but --help, the worktree resolved from <path> instead of
+                                              the working directory; <path> absolute, with no `.`, `..` or empty part
+    rw-git where                              print five lines, worktree:, repository:, git-dir:, kind: (managed <slug>
+                                              or unmanaged) and head: (a branch, or detached <id>); writes no ref,
+                                              index, object or config
     rw-git add <path>...                      stage these paths
     rw-git restore [--staged] <path>...       unstage them, or put the index copy back in the worktree
     rw-git commit --message-file <file>       commit what is staged, the message read from <file>
@@ -17,6 +22,8 @@ the subcommands below, each held to its shape, and keeps git from running any pr
                                               line, `#` comments and blank lines skipped
     rw-git switch -c <branch>                 make an own branch at HEAD and switch to it
     rw-git switch <branch>                    switch to an own branch (unmanaged: any existing branch)
+    rw-git switch --detach <commit>           detach HEAD at a full commit id, moving no branch; git refuses (exit 1)
+                                              when that would lose a local change
     rw-git reset --soft <commit>              move the own branch to a full commit id, keeping index and files;
                                               prints the old tip
     rw-git reset --keep <commit>              the same, resetting the index and the files that differ; git refuses
@@ -37,10 +44,10 @@ the subcommands below, each held to its shape, and keeps git from running any pr
                                               lists for this repository
     rw-git --help                             this text
 
-Where it runs. The working directory is a worktree a repository in launch.json's `repos` lists, or that
-repository's main checkout, checked as owner_git.py checks one: by canonical path, and with the worktree's own git
-directory. A worktree at <repo>/.worktrees/<slug>, or at the old place <repo>/.claude/worktrees/<slug>, owns the
-branches robowright/<slug> and robowright/<slug>-u<N>; the main checkout owns what an unmanaged checkout owns, below.
+Where it runs. The directory, --dir's path or else the working directory, is a worktree a repository in launch.json's
+`repos` lists, or that repository's main checkout, checked as owner_git.py checks one: by canonical path, and with
+the worktree's own git directory. A worktree at <repo>/.worktrees/<slug>, or at the old place
+<repo>/.claude/worktrees/<slug>, owns the branches robowright/<slug> and robowright/<slug>-u<N>; the main checkout owns what an unmanaged checkout owns, below.
 A path is relative to the worktree or absolute inside it, passes through no linked folder, and names no `.git`. The message file is a plain
 file of at most 64 KiB under <sessions_root>/<slug>/ or <projects_root>/<project>/prs/<slug>/, reached through no link;
 so is a scope file. A commit that adds, removes or moves a gitlink (mode 160000) is refused, whatever the
@@ -67,8 +74,10 @@ printable ASCII, a character git refuses in a ref name, `@{` or `..` is protecte
 existing branch, a protected one included; every subcommand that writes a branch (commit, commit --amend, reset, rebase,
 cherry-pick, stash, push) is refused while HEAD is on a protected branch, and `switch -c` and `push` name an
 unprotected one; reset and push --force-with-lease also refuse a branch a remote-tracking ref ending /<branch>
-(case folded) or an upstream tracks, as of the last fetch. Each of those is refused on a detached HEAD, and, but for the --continue
-/ --abort steps, with a merge, rebase, cherry-pick or revert stopped half way; so is `switch`. Its message file lies
+(case folded) or an upstream tracks, as of the last fetch. Each of those is refused on a detached HEAD (`switch
+--detach` is how a session gets there, and `switch <branch>` back), and, but for the --continue / --abort steps,
+with a merge, rebase, cherry-pick or revert stopped half way; `switch`, in each form, is refused for such a stopped
+operation but not on a detached HEAD. An unmanaged checkout's message file lies
 under /private/tmp/claude-<uid>/, the account's DARWIN_USER_TEMP_DIR or a granted folder, and never inside the repository.
 
 What it keeps git from running. Through the installed wrapper only PATH and HOME reach it, so an ssh agent's
@@ -87,13 +96,13 @@ Exit codes:
   exit 1  git ran and failed; its output follows, control bytes removed
   exit 2  refused before git wrote anything: `refused: <code>: <detail>` on stderr
 Refusal codes:
-  usage                    not one of the forms above
+  usage                    not one of the forms above, or a --dir path out of shape
   launch-config            launch.json has no well-formed `repos`, or names a path through a link; outside `repos`, a
                            bad `desktop_roots` entry or a settings file that cannot be read; unmanaged, a bad
                            `protected_branches` value; for a push to a remote other than origin, a bad `push_remotes` value
   repos-unconfigured       no repository is trusted
-  worktree-unlisted        the working directory is not a worktree or main checkout of a `repos` repository, nor a
-                           main checkout under a `desktop_roots` entry or a granted folder
+  worktree-unlisted        the directory (--dir's, else the working one) is not a worktree or main checkout of a
+                           `repos` repository, nor a main checkout under a `desktop_roots` entry or a granted folder
   worktree-foreign-gitdir  the worktree's .git names a git directory other than its own, or its rw-git.lock is not a
                            file rw-git can open
   git-unsupported          /usr/bin/git cannot read attributes from a tree (--attr-source, git 2.41.0)
@@ -279,7 +288,8 @@ def read(place, *args) -> str:
 
 # -- where it runs ---------------------------------------------------------------------------------------------------
 
-def locate() -> Place:
+def locate(start) -> Place:
+    """The checked place for `start`, the directory --dir names, or the working directory when it is None."""
     try:
         repos = role_grants.repos()
         for entry in role_grants.spelled_repos():
@@ -288,18 +298,19 @@ def locate() -> Place:
         raise Refused("launch-config", str(refusal)) from None
     try:
         listed = owner_git.index(repos)
-        here = os.path.realpath(os.getcwd())
+        start = os.getcwd() if start is None else start
+        here = os.path.realpath(start)
         if here not in listed:
             desktop = role_grants.desktop_repo(here, role_grants.launch_config(), owner_home())
             listed = {**owner_git.index([desktop]), **listed} if desktop is not None else listed
     except role_grants.Refused as refusal:
         raise Refused("launch-config", str(refusal)) from None
     except OSError as error:
-        raise Refused("worktree-unlisted", f"the working directory cannot be named ({owner_git.shown(error)})") from None
+        raise Refused("worktree-unlisted", f"the directory cannot be named ({owner_git.shown(error)})") from None
     try:
-        worktree, repo = owner_git.check(os.getcwd(), listed)
+        worktree, repo = owner_git.check(start, listed)
     except owner_git.UnlistedDirectory:
-        raise Refused("worktree-unlisted", f"'{owner_git.shown(here)}' is not a directory rw-git serves: a worktree or main "
+        raise Refused("worktree-unlisted", f"'{owner_git.shown(start)}' is not a directory rw-git serves: a worktree or main "
                                            f"checkout of a repository `repos` in {owner_git.launch_json()} lists, or a main "
                                            f"checkout under a `desktop_roots` entry or a granted folder") from None
     except owner_git.Unlisted as refusal:
@@ -571,7 +582,7 @@ def message(place, path, code="message-file") -> bytes:
     opened one component at a time without following a link, a regular file with one link of at most 64 KiB. The
     scope file is read the same way, refused as `scope`."""
     parts = path.split("/")
-    if not path.startswith("/") or any(part in ("", ".", "..") for part in parts[1:]):
+    if not plain_absolute(path):
         raise Refused(code, f"{owner_git.shown(path)} is not an absolute path without `.`, `..` or `//`")
     if place.slug is None:
         path = unmanaged_message_path(place, path, code)
@@ -642,6 +653,20 @@ def publishes(place) -> None:
 
 # -- subcommands -----------------------------------------------------------------------------------------------------
 
+def plain_absolute(path) -> bool:
+    """An absolute path with no empty, `.` or `..` part: the shape of a message file, a scope file and --dir."""
+    return path.startswith("/") and not any(part in ("", ".", "..") for part in path.split("/")[1:])
+
+
+def explicit_dir(args) -> tuple:
+    """(the directory --dir names, or None for the working directory; the form after it). Only a leading pair, once."""
+    if len(args) < 2 or args[0] != "--dir":
+        return None, args
+    if not plain_absolute(args[1]):
+        raise Refused("usage", f"--dir {owner_git.shown(args[1])} is not an absolute path without `.`, `..` or `//`")
+    return args[1], args[2:]
+
+
 def plain(args) -> bool:
     return all(arg and not arg.startswith("-") for arg in args)
 
@@ -649,6 +674,8 @@ def plain(args) -> bool:
 def parse(args):
     """(handler, its arguments) for one of the forms --help lists; Refused usage for anything else."""
     verb, rest = (args[0], args[1:]) if args else (None, [])
+    if verb == "where" and not rest:
+        return where, []
     if verb == "add" and rest and plain(rest):
         return add, rest
     if verb == "restore" and rest[:1] == ["--staged"] and rest[1:] and plain(rest[1:]):
@@ -661,6 +688,8 @@ def parse(args):
         return commit, [form[1], amend, form[3] if len(form) == 4 else None]
     if verb == "reset" and len(rest) == 2 and rest[0] in ("--soft", "--keep") and plain(rest[1:]):
         return reset, rest
+    if verb == "switch" and len(rest) == 2 and rest[0] == "--detach" and plain(rest[1:]):
+        return detach, rest[1:]
     if verb == "switch" and len(rest) == 2 and rest[0] == "-c" and plain(rest[1:]):
         return switch, [True, rest[1]]
     if verb == "switch" and len(rest) == 1 and plain(rest):
@@ -690,6 +719,20 @@ def parse(args):
     if verb == "push" and len(target) == 3 and target[0] == "--remote" and plain(target[1:]):
         return push, [lease, target[2], target[1]]
     raise Refused("usage", f"rw-git {owner_git.shown(' '.join(args))} is not a form rw-git takes; see rw-git --help")
+
+
+def where(place):
+    """The resolved place and HEAD, five lines; read only."""
+    head = read(place, "symbolic-ref", "-q", "HEAD").strip()
+    if head.startswith("refs/heads/"):
+        on = head[len("refs/heads/"):]
+    else:
+        on = f"detached {read(place, 'rev-parse', 'HEAD').strip()}"
+    kind = "unmanaged" if place.slug is None else f"managed {place.slug}"
+    lines = (f"worktree: {place.worktree}", f"repository: {place.repo}", f"git-dir: {place.git_dir}", f"kind: {kind}",
+             f"head: {on}")
+    place.shown.append((sys.stdout, "".join(f"{owner_git.shown(line)}\n" for line in lines)))
+    return 0
 
 
 def add(place, *paths):
@@ -1038,6 +1081,14 @@ def switch(place, create, branch):
     return run(place, "switch", "--no-guess", branch)
 
 
+def detach(place, target):
+    """HEAD at a full commit id, no branch moved; git refuses (exit 1) when that would lose a local change."""
+    if place.slug is None:
+        unstopped(place)
+    known_commit(place, target)
+    return run(place, "switch", "--no-overwrite-ignore", "--detach", target)
+
+
 def rebase(place, autosquash, target):
     branch = own_head(place)
     known_commit(place, target)
@@ -1210,8 +1261,9 @@ def main(args) -> int:
         print(HELP)
         return 0
     try:
-        handler, values = parse(args)
-        place = locate()
+        start, form = explicit_dir(args)
+        handler, values = parse(form)
+        place = locate(start)
         try:
             with RepositoryLock(place):
                 return handler(place, *values)
