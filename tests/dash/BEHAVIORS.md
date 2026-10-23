@@ -1136,3 +1136,89 @@ two session records whose `unit` is `export-csv` and one whose `unit` is `sample
 | # | Area | Given | When | Then | Source | Test |
 |---|---|---|---|---|---|---|
 | 065-T1 | no ticket, bare slug | the fixture | `--once <out>` | U1's state links `export-csv`; the `export-csv` card's spend line sums the two `export-csv` records only | the U65 note: a ticket-less session shows in each reader as its unit id, the directory name; 023-U2-B4.1, U2-R2.1 | `test_claims_and_prices_a_session_with_no_ticket__by_its_directory_name` |
+
+## 061 · an archived project and its sessions left out; settled statuses
+
+A direct build. `"archived": true` in a project's `robowright.json` marks it archived; the JSON value `true` and
+nothing else does (`is_archived` in `run-roster.py`, the one reader of the key). An archived project is left out of
+the index, the text summary, `--once`'s pages and `/p/<name>`, and the sessions filed under it are dropped, never
+listed as orphans. Bound 1, the live-work exception: while any of its sessions is live (a session directory whose
+`run.json` `phase` is not `done` and not `parked`, an unreadable one included, or a direct build with no session
+directory of its own that the live-session registry shows for one of its slugs) it is shown as before, with the word
+`archived` beside its name. Bound 2, the cost: a hidden project's session directory costs one `run.json` read, and nothing else
+in it is read; no git call names it. A session directory with no `run.json` costs nothing: its name alone drops it.
+Bound 3: naming the project (`robowright-dash.py <project>`) or passing `--all` shows it, marked `archived`.
+
+Fixture: project `sample` (U1 `first`) with `robowright.json` `{"archived": true}`; project `notes`, not archived,
+with one unit and no sessions; SLUG filed under `sample`.
+
+| # | Area | Given | When | Then | Source | Test |
+|---|---|---|---|---|---|---|
+| 061-A1 | archived, finished | the fixture; SLUG done, through intake | `--once <out>` | no `sample.html`; the index links no `sample.html`, has no `Sessions with no project folder`, and links `notes.html` | briefing A2: "left out of the index … `--once`'s pages"; "never listed as orphans" | `test_writes_no_page_and_no_orphan_for_it__when_a_finished_project_is_archived` |
+| 061-A2 | … text summary | as A1 | `robowright-dash.py` | no line starts `sample`; no `no project folder` line; a line starts `notes:` | briefing A2: "the text summary" | `test_prints_no_line_for_it__when_a_finished_project_is_archived` |
+| 061-A3 | not the JSON `true` | `archived` `1`, `"true"`, `"yes"`, `[true]`, or no key; SLUG done | `robowright-dash.py` | a line starts `sample:`, and no line carries `archived` | briefing A1: "the JSON value `true` and nothing else" | `test_shows_the_project_unmarked__when_archived_is_anything_but_json_true` |
+| 061-A4 | refused read | `sample`'s robowright.json a symlink to a file outside holding `{"archived": true}`; SLUG done | `robowright-dash.py` | a line starts `sample:` | briefing A1: "an unreadable file (which `project_settings` reads as `{}`) is not archived"; 052b-R1 | `test_shows_the_project__when_its_robowright_json_is_a_link_to_an_archived_flag` |
+| 061-A5 | `/p/<name>` | as A1 | `--serve PORT`, GET `/p/sample` | 404, body `no such project` | briefing A2: "`/p/<name>` (404 "no such project" …)" | `test_answers_404__when_the_page_of_an_archived_project_is_asked_for` |
+| 061-A6 | live session | the fixture; SLUG `implement`, or SLUG `stopped` | `--once <out>` | `sample.html` written, its text and the index's carrying `sample archived` | briefing A2: "Except when any of its sessions is live … the word `archived` beside its name in the index, its page" | `test_shows_the_project_marked_archived__when_a_session_of_it_is_live` |
+| 061-A7 | … text summary | the fixture; SLUG `implement` | `robowright-dash.py` | the `sample` line reads `archived` beside the name, and lists SLUG | as A6: "and the text summary" | `test_prints_the_project_marked_archived__when_a_session_of_it_is_live` |
+| 061-A8 | parked is not live | the fixture; SLUG `parked` | `--once <out>` | no `sample.html` | briefing A2: "`phase` is not `done` and not `parked`" | `test_writes_no_page_for_it__when_its_only_session_is_parked` |
+| 061-A9 | live direct build | the fixture, no session folder; `worker-sample-001-first` busy | `--once <out>` | `sample.html` written; the index carries `sample archived` | briefing A2: "or a direct build the live-session registry shows for a slug of that project" | `test_shows_the_project_marked_archived__when_a_direct_build_of_it_is_live` |
+| 061-A10 | nothing read but run.json | the fixture; SLUG done, a FIFO at its `LEDGER.md` and `events.jsonl`; `sample-002-second` with no `run.json`, a FIFO at its `LEDGER.md`, its Planner busy | `--once <out>`, under a 20 s timeout | exit 0 within the timeout; no `sample.html`; no page says `Planner briefing` | briefing A3: "reads its `run.json` and nothing else"; A2: "dropped on its directory name alone, nothing in it read" | `test_reads_nothing_but_run_json__for_a_session_of_an_archived_project` |
+| 061-A11 | no git for it | the fixture; `robowright.json` also names a trusted scratch repo; SLUG done, its worktree a linked worktree of that repo on `robowright/<SLUG>`, not in main | `--once <out>`, a recording git on `PATH` | no git call names SLUG or runs in its worktree | briefing A3: "no git call, and no entry in `in_main_slugs`" | `test_runs_no_git_for_it__when_a_session_of_an_archived_project_is_finished` |
+| 061-A16 | no git for a direct build | the fixture; `robowright.json` also names a trusted scratch repo holding `robowright/<SLUG>`, not in main; `prs/<SLUG>.md` and `prs/<SLUG>/ACCEPTED.json` naming main's tip; no live session | `--once <out>`, a recording git on `PATH` | no git call names SLUG | briefing A3: "no git call"; held out, added after green | `test_runs_no_git_for_it__when_a_direct_build_of_an_archived_project_is_finished` |
+| 061-A12 | named | as A1 | `robowright-dash.py sample` | exit 0; the first line reads `archived` beside `sample` | briefing A2: "shows an archived project when it is named … naming it is asking for it" | `test_prints_the_project_marked_archived__when_it_is_named` |
+| 061-A13 | `--all`, pages | as A1 | `--all --once <out>` | `sample.html` written; the index carries `sample archived` | briefing A4: "every archived project is loaded and shown, marked `archived`" | `test_writes_the_project_marked_archived__when_once_runs_with_all` |
+| 061-A14 | `--all`, text | as A1 | `robowright-dash.py --all` | the `sample` line reads `archived` beside the name | briefing A4: "in all three modes (text …)" | `test_prints_the_project_marked_archived__when_the_summary_runs_with_all` |
+| 061-A15 | `--all`, served | as A1 | `--serve PORT --all`, GET `/p/sample` | 200, the page carrying `sample archived` | briefing A4: "`--serve`, where it holds for the process" | `test_serves_the_project_page_marked_archived__when_serve_runs_with_all` |
+
+### Settled statuses
+
+A unit with no session whose Status cell, after `lower().lstrip("*_ ")`, begins `closed` or `moved` is settled: its
+own tone, `settled`, labelled `closed or moved` (`Closed or moved` on the pages), drawn in the `idle` colour, placed
+after `parked`. A settled unit weighs nothing: it leaves `total`, `earned` and `complete_points`, so a plan whose other
+units are complete reads 100%, and a stage of complete and settled units is complete. `submitted` and any word not named
+here stay `not started`.
+
+Fixture: project `sample`, its Task Breakdown `U1 first S Done`, `U2 second M Closed`, `U3 third L Moved to the notes
+project`, `U4 fourth S **Moved**`, `U5 fifth XS Submitted`; no session unless a row says so.
+
+| # | Area | Given | When | Then | Source | Test |
+|---|---|---|---|---|---|---|
+| 061-C1 | `Closed` | the fixture | `robowright-dash.py sample` | U2's line reads `closed or moved` | briefing C1: "`closed` and `moved` map to a new tone, `settled`, label `closed or moved`" | `test_reads_a_unit_closed_or_moved__when_its_status_says_closed` |
+| 061-C2 | `Moved …` | the fixture | `robowright-dash.py sample` | U3's line reads `closed or moved` | as C1 | `test_reads_a_unit_closed_or_moved__when_its_status_says_moved_to_another_project` |
+| 061-C3 | bold prefix | the fixture | `robowright-dash.py sample` | U4's line reads `closed or moved` | as C1, "after the same `lstrip`" (the scope note) | `test_reads_a_unit_closed_or_moved__when_its_status_is_bold` |
+| 061-C4 | another word | the fixture | `robowright-dash.py sample` | U5's line reads `not started` | briefing C1: "`submitted` and every other word stay `todo`" | `test_reads_a_unit_not_started__when_its_status_says_submitted` |
+| 061-C5 | no weight | `sample` planning `U1 first S Done` and `U2 second M Closed` only | `robowright-dash.py` | the `sample` line begins `sample: 100% built, 100% complete` | briefing C1: "contributes nothing to `total`, `earned` or `complete_points`, so a plan of nine complete units and one moved reads 100%" | `test_reads_the_plan_complete__when_every_unit_but_a_closed_one_is_done` |
+| 061-C6 | stage complete | `sample` planning `### Stage 1` with U1 `Done` and U2 `Closed`, `### Stage 2` with U3 `todo`; `sample-003-third` implementing | `--once <out>` | `sample.html`'s Stage 1 starts collapsed | briefing C1: "a stage whose units are all complete or settled reads complete (`is_stage_complete`)"; 037's folding rule | `test_folds_a_stage__when_its_units_are_complete_or_closed` |
+| 061-C7 | the legend | as C6 | `--once <out>` | `sample.html`'s legend reads `1 closed or moved` | briefing C1: "the legend … show the tone through the existing `PLAN_LABEL` … loops" | `test_counts_the_closed_unit_in_the_legend__on_the_project_page` |
+| 061-C8 | the index card | as C6 | `--once <out>` | the index card's count line reads `1 Closed or moved` | briefing C1: "the index card's count line" (`STATE`) | `test_counts_the_closed_unit_on_the_index_card` |
+
+### Verified in main, once per `--serve` process
+
+Under `--serve`, a finished session verified in main costs no git call again in that process. The server holds, for
+the life of the process, each session's slug and the id it was verified against: a direct build's `ACCEPTED.json`
+`sha` once `is_accept_recorded` is true, or the literal `gone` once `has_reached_main` is true because the branch is
+gone from every trusted repository. The id is read before either check's git calls, after the checks that cost none. A
+record naming another id is verified again; a negative is never held, so an accept shows on the next refresh; and
+nothing is held from a refresh in which a trusted repository could not answer. Nothing is written to disk, and text mode
+and `--once`, one refresh each, neither fill nor read it. A finished session read through its listed worktree, or
+through a trusted repository that still holds its branch, is checked on every refresh, as before.
+
+Fixture: project `sample` naming one trusted scratch repository with `robowright/<SLUG>` one commit ahead of main;
+`--serve PORT` with a recording git on `PATH`, `/` asked for twice.
+
+| # | Area | Given | When | Then | Source | Test |
+|---|---|---|---|---|---|---|
+| 061-D1 | branch gone | SLUG done, through intake, its worktree removed; the branch deleted | GET `/`, then GET `/` | `sample` reads 100% complete on both; the second GET's git calls name no `refs/heads/robowright/<SLUG>` | briefing D3: "a verified session costs no git call again in that process"; "the branch-gone path … keyed by the literal `gone`" | `test_runs_no_git_for_it_on_the_next_refresh__when_its_branch_was_verified_gone` |
+| 061-D2 | accept record | 055-A1's fixture: main moved, the branch cherry-picked onto it, `ACCEPTED.json` naming main's tip, the branch kept | GET `/`, then GET `/` | `sample` reads 100% complete on both; the second GET's git calls name no record `sha` | briefing D3: "filled when `is_accept_recorded` … returns true, and read before either runs on the next refresh" | `test_runs_no_git_for_its_record_on_the_next_refresh__when_its_accept_record_was_verified` |
+| 061-D3 | record rewritten | as D2 | GET `/`; the record rewritten to the branch tip; GET `/` | `sample` reads 100% complete on the first, 0% on the second | briefing D3: "keyed by slug and the id that was verified … so a record rewritten to another id is re-verified"; 055-A2 | `test_checks_the_record_again__when_it_is_rewritten_to_another_commit_after_it_was_verified` |
+| 061-D4 | negative | SLUG done, its worktree removed; the branch kept, not in main | GET `/`; the branch fast-forwarded into main; GET `/` | `sample` reads 0% complete on the first, 100% on the second | briefing D3: "A negative is re-checked every refresh … a negative becomes a positive the moment the Owner accepts" | `test_reads_it_complete_on_the_next_refresh__when_its_branch_is_accepted_after_a_refresh_found_it_not_in_main` |
+| 061-D5 | process only | as D1, served and stopped once | a second `--serve PORT`, GET `/` | its git calls name `refs/heads/robowright/<SLUG>` | briefing D3: "In-process only"; "**No file**" | `test_checks_the_branch_again__in_a_new_serve_process` |
+| 061-D6 | a repository that could not answer | as D1; project `notes` naming a second trusted repository that holds the branch, not in its main, its `HEAD` unreadable | GET `/`; the second repository's `HEAD` restored; GET `/` | `sample` reads 100% complete on the first, 0% on the second | gate review of D, F1: the uncached code reads that refresh wrong and the next one right, so holding it would make one failed call last; briefing D3 "positives only" | `test_checks_the_branch_again__when_a_trusted_repository_could_not_answer_the_refresh_that_found_it_gone` |
+| 061-D7 | worktree back on disk | as D1 | GET `/`; the session's `run.json` worktree path made a directory; GET `/` | `sample` reads 100% complete on the first, 0% on the second | gate review of D, F2: the worktree-on-disk guard costs no git call and must run before the held id; `has_reached_main`'s "no worktree of it is left on disk" | `test_reads_it_not_in_main__when_its_worktree_is_back_on_disk_after_its_branch_was_verified_gone` |
+| 061-D8 | an unverified record | main moved; the branch kept, its worktree outside `.worktrees`; a cherry-pick of it on a side branch `pick`, not on main; `ACCEPTED.json` naming the pick | GET `/`; main fast-forwarded to `pick`; GET `/` | `sample` reads 0% complete on the first, 100% on the second | briefing D3: "A negative is re-checked every refresh"; gate review of D, F3 (a held negative record survived every test) | `test_reads_a_direct_build_complete_on_the_next_refresh__when_the_commit_its_record_names_reaches_main` |
+| 061-D9 | the other routes | as D1 | `/p/sample` asked for twice; `/attention.json` asked for twice | the second ask's git calls name no `refs/heads/robowright/<SLUG>` | briefing D3: "in that process"; gate review of D, F3 (passing `None` on either route survived) | `test_runs_no_git_for_it_on_the_next_refresh_of_the_project_page_or_the_attention_feed__when_its_branch_was_verified_gone` |
+| 061-D10 | a record verified while a repository could not answer | the branch gone from `sample`'s repository; `ACCEPTED.json` naming its main; project `notes`'s trusted repository holds the branch, its `HEAD` unreadable | GET `/`; that `HEAD` restored; GET `/` | `sample` reads 100% complete on the first, 0% on the second | as D6, for `is_accept_recorded`; 055-A5 (a record alone, while the branch exists, is not evidence) | `test_checks_the_record_again__when_a_trusted_repository_could_not_answer_the_refresh_that_verified_it` |
+
+Text mode and `--once` are accepted untested: each runs one refresh in its process, so neither filling nor reading the
+cache there changes anything a test can see.

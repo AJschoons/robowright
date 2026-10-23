@@ -107,6 +107,7 @@ and runs the Planner on Opus. The launcher's `--model` and `--effort` beat it fo
 | `plan_review` | Where the Planner's intent review runs: `finish` (the default), `per-unit` or `off` |
 | `owner_brief` | Whether the Explainer writes an owner brief for each published stack |
 | `project_report` | Whether the Explainer writes the end-of-project report |
+| `archived` | Set it `true` when the project is finished: the dashboard leaves it out while nothing in it is live, and the roster leaves out its finished sessions; `--all` shows both |
 | `owner_only` | That floor: the decisions that always stop for you, which every brief's **one-way doors** start from |
 | `repos` | The project's repositories, by name, path and origin |
 

@@ -21,5 +21,6 @@
     "anything another person reads"
   ],
   "owner_brief": true,
-  "project_report": true
+  "project_report": true,
+  "archived": false
 }

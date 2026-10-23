@@ -484,7 +484,9 @@ Two more switches, on by default at every level: `owner_brief` — an **Explaine
 writes an owner brief for each published stack before the Owner reads it; `project_report`
 — the Explainer writes the end-of-project report at Phase 7 (`explainer` skill). A file that
 carries `review_guide` instead is read as if it carried `owner_brief` with the same value: that
-is the switch's earlier name.
+is the switch's earlier name. `archived` is a third, off by default: set it `true` when the project is finished,
+and the dashboard leaves it out while nothing in it is live, and the roster leaves out its finished sessions;
+`--all` shows both.
 
 **Models per role** — defaults are Robowright table in `robowright/SKILL.md`; each role has a floor
 below which the role stops working, not just gets cheaper:

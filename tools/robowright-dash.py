@@ -14,7 +14,7 @@ robowright-dash.gaps.json under the accounting root (run-cost.py's), and only in
     robowright-dash.py <project>        text summary of one project, with its units
     robowright-dash.py --serve PORT     index at /, a page per project at /p/<name>, re-rendered on every GET
     robowright-dash.py --once DIR       index.html plus <project>.html into DIR
-    [--runs-root DIR] [--projects-root DIR]
+    [--all] [--runs-root DIR] [--projects-root DIR]
 """
 import argparse
 import html
@@ -39,17 +39,17 @@ EVENTS_SHOWN = 8
 SIZE_WEIGHT = {"XS": 1, "S": 2, "M": 3, "L": 5, "XL": 8}
 DEFAULT_WEIGHT = 3
 # A unit's tone, most urgent first: complete = in its repo's main; built = every session done and through the Lead's
-# intake, none in main yet; intake = done, but the Lead has not handed it to the Owner.
-PLAN_TONES = ("stopped", "owner-call", "rebriefing", "rotating", "working", "briefing", "briefed", "intake", "built", "complete", "parked", "todo")
+# intake, none in main yet; intake = done, but the Lead has not handed it to the Owner; settled = closed or moved.
+PLAN_TONES = ("stopped", "owner-call", "rebriefing", "rotating", "working", "briefing", "briefed", "intake", "built", "complete", "parked", "settled", "todo")
 # The legend reads the way work moves through the bar: furthest along first, not started last.
-LEGEND_ORDER = ("complete", "built", "intake", "working", "rotating", "rebriefing", "owner-call", "stopped", "parked", "briefed", "briefing", "todo")
+LEGEND_ORDER = ("complete", "built", "intake", "working", "rotating", "rebriefing", "owner-call", "stopped", "parked", "settled", "briefed", "briefing", "todo")
 assert set(LEGEND_ORDER) == set(PLAN_TONES)
 PLAN_LABEL = {"complete": "complete", "built": "awaiting acceptance", "intake": "with the Lead", "working": "working", "stopped": "stopped",
-              "rotating": "rotating", "briefed": "briefed", "parked": "parked", "todo": "not started",
+              "rotating": "rotating", "briefed": "briefed", "parked": "parked", "settled": "closed or moved", "todo": "not started",
               "rebriefing": "Planner rebriefing", "briefing": "Planner briefing", "owner-call": "rebrief needs your call"}
 SESSION_TONE = {"done": "done", "stopped": "stopped", "parked": "parked", "briefed": "briefed"}
 TERMINAL_TONES = ("done", "parked")
-NOT_STARTED_TONES = ("todo", "briefed", "parked")
+NOT_STARTED_TONES = ("todo", "briefed", "parked", "settled")
 # What the Lead still owes a finished session before the Owner reads it (lead skill → intake, steps 2 and 7).
 LEAD_STAGE_PHRASE = {"intake": "waiting on the Lead's intake", "review guide": "waiting on the Lead's owner brief",
                      "check": "waiting on the Lead's check", "owner brief": "the Lead's owner brief in progress"}
@@ -70,6 +70,8 @@ BRANCH_SLUG = re.compile(r"[A-Za-z0-9]+([._-][A-Za-z0-9]+)*(?<!\.lock)")
 # A direct build's accept record, in the project folder's prs/<slug>/, and the commit id it must name.
 ACCEPT_RECORD = "ACCEPTED.json"
 FULL_COMMIT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+# The id a branch verified gone from every trusted repository is held under: a deleted branch does not come back.
+GONE = "gone"
 
 
 # ---------------------------------------------------------------- config
@@ -408,8 +410,8 @@ def read_run(path: Path) -> dict:
     return run
 
 
-def load_session(dir_: Path, agents: list) -> dict:
-    run = held_run(read_run(dir_ / "run.json"))
+def load_session(dir_: Path, run: dict, agents: list) -> dict:
+    run = held_run(run)
     touched = max((p.stat().st_mtime for p in [dir_ / "run.json", dir_ / "LEDGER.md", dir_ / ".session-state.lock"]
                    if p.exists()), default=0)
     planner = planner_for(dir_.name, agents)
@@ -502,19 +504,26 @@ def unit_key(slug: str) -> tuple:
     return project_of(slug), session_number(slug)
 
 
-def direct_builds(agents: list, known: set) -> list:
+def direct_build_agents(agents: list) -> dict:
+    """Slug → the live session named for it under any role name but the Planner's and the Lead's; a name that ends in no
+    slug is keyed None."""
+    role_prefixes = (PLANNER_PREFIX + "-", LEAD_PREFIX + "-")
+    return {slug_in(a.get("name") or ""): a for a in agents if not (a.get("name") or "").startswith(role_prefixes)}
+
+
+def direct_builds(agents: list, known: set, hidden: set) -> list:
     """A direct build has no session folder: it shows as a live session named for its slug, and its records land in
     the project folder's prs/<slug>/. It is finished once prs/<slug>.md, the change description, exists, its session is
     not mid-turn (`shell` too: a background suite still runs), and its worktree has nothing uncommitted; a Worker may
     write the description before it commits.
-    Any role name but the Planner's and the Lead's can front one: the Lead names direct builds as it likes."""
-    role_prefixes = (PLANNER_PREFIX + "-", LEAD_PREFIX + "-")
-    named = {slug_in(a.get("name") or ""): a for a in agents if not (a.get("name") or "").startswith(role_prefixes)}
+    Any role name but the Planner's and the Lead's can front one: the Lead names direct builds as it likes. A hidden
+    project's prs/ is not listed."""
+    named = direct_build_agents(agents)
     workers = {unit_key(slug): a for slug, a in named.items() if slug}
     slugs = {unit_key(slug): slug for slug in named if slug}
     for folder in project_folders():
         prs = folder / "prs"
-        if prs.is_dir():
+        if folder.name not in hidden and prs.is_dir():
             for p in prs.iterdir():
                 slug = p.name.removesuffix(".md")
                 if project_of(slug) == folder.name and session_number(slug):
@@ -537,25 +546,68 @@ def direct_builds(agents: list, known: set) -> list:
     return found
 
 
-def load_sessions() -> list:
+def session_dirs() -> list:
+    """(directory, run) for each session directory, its run.json read once: None when it has none, the error when it is
+    unreadable."""
     if not SESSIONS_ROOT.is_dir():
         return []
-    found, agents, known = [], live_agents(), set()
+    found = []
     for dir_ in sorted(SESSIONS_ROOT.iterdir()):
         if not dir_.is_dir():
             continue
         if not (dir_ / "run.json").exists():
+            found.append((dir_, None))
+            continue
+        try:
+            found.append((dir_, read_run(dir_ / "run.json")))
+        except (ValueError, OSError) as err:
+            found.append((dir_, err))
+    return found
+
+
+def filed_dir(dir_: Path, run) -> str | None:
+    """The project a session directory is filed under; by its name alone when it has no readable run.json."""
+    return filed_under(run, dir_.name) if isinstance(run, dict) else project_of(dir_.name)
+
+
+def archived_projects() -> set:
+    """The project folders whose robowright.json archives them, as run-roster.py's is_archived reads it."""
+    return {f.name for f in project_folders() if ROSTER.is_archived(project_settings(f))}
+
+
+def live_projects(dirs: list, agents: list) -> set:
+    """Projects with live work: a session directory whose run.json phase is neither `done` nor `parked`, an unreadable
+    one included, or a direct build the live-session registry names. Briefing folders, with no run.json, are not."""
+    known = {unit_key(dir_.name) for dir_, run in dirs if run is not None}
+    live = {filed_dir(dir_, run) for dir_, run in dirs
+            if run is not None and not (isinstance(run, dict) and run.get("phase") in ("done", "parked"))}
+    return live | {project_of(slug) for slug in direct_build_agents(agents) if slug and unit_key(slug) not in known}
+
+
+def unreadable_session(dir_: Path, err: Exception) -> dict:
+    return {"slug": dir_.name, "project": project_of(dir_.name), "number": session_number(dir_.name),
+            "dir": str(dir_), "error": str(err), "tone": "unknown", "touched": None}
+
+
+def load_sessions(dirs: list, agents: list, hidden: set) -> list:
+    """Every session but those filed under a hidden project, which cost nothing past the run.json `dirs` already read."""
+    found, known = [], {unit_key(dir_.name) for dir_, run in dirs if run is not None}
+    for dir_, run in dirs:
+        if filed_dir(dir_, run) in hidden:
+            continue
+        if run is None:
             pending = briefing_session(dir_, agents)
             if pending:
                 found.append(pending)
             continue
-        known.add(unit_key(dir_.name))
+        if not isinstance(run, dict):
+            found.append(unreadable_session(dir_, run))
+            continue
         try:
-            found.append(load_session(dir_, agents))
+            found.append(load_session(dir_, run, agents))
         except (ValueError, OSError) as err:
-            found.append({"slug": dir_.name, "project": project_of(dir_.name), "number": session_number(dir_.name),
-                          "dir": str(dir_), "error": str(err), "tone": "unknown", "touched": None})
-    builds = direct_builds(agents, known)
+            found.append(unreadable_session(dir_, err))
+    builds = direct_builds(agents, known, hidden)
     building = {unit_key(b["slug"]) for b in builds if b["agent"]}
     return [s for s in found if not (s.get("kind") == "briefing" and unit_key(s["slug"]) in building)] + builds
 
@@ -655,12 +707,14 @@ def is_change_of(repo: str, sha: str, branch: str) -> bool:
     return bool(base) and ours is not None and ours == patch_id(repo, base, ref)
 
 
-def is_accept_recorded(session: dict, trusted: list) -> bool:
+def is_accept_recorded(session: dict, trusted: list, verified: dict | None) -> bool:
     """A direct build's accept record names a commit on main in a trusted repository its project names, and while
     `robowright/<slug>` is still in any trusted repository, a commit on that repository's main carrying the branch's
     change. The project folder is session-writable, so the record alone is not evidence; once the branch is gone there is
     nothing left to compare, or to lose."""
     sha = recorded_accept(session)
+    if sha and verified is not None and verified.get(session["slug"]) == sha:
+        return True
     repos = project_repos(session["project"], trusted) if sha else None
     if repos is None:
         return False
@@ -672,7 +726,11 @@ def is_accept_recorded(session: dict, trusted: list) -> bool:
     holders = [repo for repo, is_held in held.items() if is_held]
     on_main = [repo for repo in (holders or repos)
                if git(repo, "merge-base", "--is-ancestor", "--end-of-options", sha, default_branch(repo)) is not None]
-    return any(is_change_of(repo, sha, branch) for repo in on_main) if holders else bool(on_main)
+    is_recorded = any(is_change_of(repo, sha, branch) for repo in on_main) if holders else bool(on_main)
+    # Held only when every trusted repository answered: one that could not may hold the branch.
+    if is_recorded and verified is not None and None not in held.values():
+        verified[session["slug"]] = sha
+    return is_recorded
 
 
 def has_branch(repo: str, branch: str) -> bool | None:
@@ -692,7 +750,7 @@ def is_branch_in_main(repo: str, branch: str) -> bool:
             or is_squashed_into(repo, ref, main))
 
 
-def has_reached_main(session: dict, listed: dict, trusted: list) -> bool:
+def has_reached_main(session: dict, listed: dict, trusted: list, verified: dict | None) -> bool:
     """A finished session's branch is in main, read in its listed worktree or in the trusted repository that holds the
     branch; or `robowright/<slug>` is gone from every trusted repository while its project names at least one trusted
     repository and each of those answers, and no worktree of it is left on disk, since teardown deletes the branch only after an accept. A missing
@@ -706,24 +764,30 @@ def has_reached_main(session: dict, listed: dict, trusted: list) -> bool:
     # Teardown removes the worktree before the branch: one still on disk was never torn down.
     if own is None or (is_path and os.path.isdir(worktree)) or not BRANCH_SLUG.fullmatch(session["slug"]):
         return False
+    if verified is not None and verified.get(session["slug"]) == GONE:
+        return True
     branch = f'robowright/{session["slug"]}'
     held = {repo: has_branch(repo, branch) for repo in trusted}
     # A repository the project names must answer; another trusted one that cannot is read as not holding the branch.
     if any(held[repo] is None for repo in own):
         return False
     holders = [repo for repo, is_held in held.items() if is_held]
+    # Held only when every trusted repository answered: one that could not may hold the branch.
+    if not holders and verified is not None and None not in held.values():
+        verified[session["slug"]] = GONE
     return any(is_branch_in_main(repo, branch) for repo in holders) if holders else True
 
 
-def in_main_slugs(sessions: list) -> set:
+def in_main_slugs(sessions: list, verified: dict | None) -> set:
     """In main on positive evidence only: run.json.accepted, a direct build's verified accept record, or
     has_reached_main. Every session branches from main and is accepted on its own, so one session's accept says nothing
-    of another's."""
+    of another's. `verified` is `--serve`'s slug → verified id for the life of the process, positives only; None when one
+    refresh is all the process makes."""
     listed, trusted = listed_worktrees(), trusted_repos()
     return {s["slug"] for s in sessions
             if "error" not in s and s["tone"] == "done"
-            and (s["run"].get("accepted") or (s.get("kind") == "direct" and is_accept_recorded(s, trusted))
-                 or has_reached_main(s, listed, trusted))}
+            and (s["run"].get("accepted") or (s.get("kind") == "direct" and is_accept_recorded(s, trusted, verified))
+                 or has_reached_main(s, listed, trusted, verified))}
 
 
 # ---------------------------------------------------------------- plan
@@ -846,7 +910,8 @@ def unit_progress(unit: dict, sessions: list, in_main: set) -> None:
         status = unit["plan_status"].lower().lstrip("*_ ")
         unit["tone"] = ("complete" if status.startswith(("done", "accepted")) else
                         "briefed" if status.startswith("briefed") else
-                        "parked" if status.startswith("parked") else "todo")
+                        "parked" if status.startswith("parked") else
+                        "settled" if status.startswith(("closed", "moved")) else "todo")
         if unit["tone"] == "complete":
             unit["fraction"] = 1.0
         return
@@ -961,7 +1026,7 @@ def decide_now_asks(path: Path) -> list | None:
     return [a for a in asks if a.lower().removesuffix(".") not in ("nothing", "none")]
 
 
-def load_project(folder: Path, all_sessions: list, in_main: set, ledger: list | None, priced: bool) -> dict:
+def load_project(folder: Path, all_sessions: list, in_main: set, ledger: list | None, priced: bool, is_archived: bool) -> dict:
     name = folder.name
     text = (folder / "PROJECT.md").read_text()
     sessions = [s for s in all_sessions if s["project"] == name]
@@ -984,14 +1049,15 @@ def load_project(folder: Path, all_sessions: list, in_main: set, ledger: list | 
         for s in own:
             if s.get("tone") in ("done", "intake") and s.get("started") and s.get("touched"):
                 hours_per_point.append((s["touched"] - s["started"]).total_seconds() / 3600 / points_each)
-    total = sum(weight(u) for u in units)
+    # A closed or moved unit was never this plan's to deliver: it weighs nothing.
+    total = sum(weight(u) for u in units if u["tone"] != "settled")
     earned = sum(weight(u) * u["fraction"] for u in units)
     complete_points = sum(weight(u) for u in units if u["tone"] == "complete")
     rate = sum(hours_per_point) / len(hours_per_point) if hours_per_point else None
     touched = [s["touched"] for s in sessions if s.get("touched")]
     mtime = datetime.fromtimestamp((folder / "PROJECT.md").stat().st_mtime, tz=timezone.utc)
     return {
-        "name": name, "folder": str(folder), "units": units, "sessions": by_recency(sessions),
+        "name": name, "folder": str(folder), "archived": is_archived, "units": units, "sessions": by_recency(sessions),
         "unplanned": [s for s in by_recency(sessions) if s["slug"] not in claimed],
         "percent": 100 * earned / total if total else 0, "complete_percent": 100 * complete_points / total if total else 0,
         "points_total": total, "points_earned": earned, "points_complete": complete_points,
@@ -1010,12 +1076,16 @@ def project_folders() -> list:
     return sorted(p for p in PROJECTS_ROOT.iterdir() if (p / "PROJECT.md").is_file())
 
 
-def load_world(only: str | None = None) -> tuple[list, list]:
-    sessions = load_sessions()
-    in_main = in_main_slugs(sessions)
+def load_world(only: str | None, shows_archived: bool, verified: dict | None) -> tuple[list, list]:
+    """Every project, or `only`; an archived one with no live work, and its sessions, left out unless `shows_archived`."""
+    agents, dirs, archived = live_agents(), session_dirs(), archived_projects()
+    hidden = set() if shows_archived else archived - live_projects(dirs, agents)
+    sessions = load_sessions(dirs, agents, hidden)
+    in_main = in_main_slugs(sessions, verified)
     ledger = read_ledger()
     priced = ledger is not None and COST_ROLLUP.load_prices().as_of is not None
-    projects = [load_project(f, sessions, in_main, ledger, priced) for f in project_folders() if only in (None, f.name)]
+    projects = [load_project(f, sessions, in_main, ledger, priced, f.name in archived) for f in project_folders()
+                if only in (None, f.name) and f.name not in hidden]
     known = {p.name for p in project_folders()}
     orphans = by_recency([s for s in sessions if s["project"] not in known])
     projects.sort(key=lambda p: (not p["live"], -p["touched"].timestamp()))
@@ -1032,7 +1102,8 @@ def text_summary(projects: list, orphans: list, detailed: bool) -> str:
         for u in p["units"]:
             counts[u["tone"]] = counts.get(u["tone"], 0) + 1
         tally = ", ".join(f"{counts[t]} {PLAN_LABEL[t]}" for t in LEGEND_ORDER if t in counts) or "no Task Breakdown"
-        head = f"{p['name']}: {p['percent']:.0f}% built, {p['complete_percent']:.0f}% complete" if p["units"] else p["name"]
+        name = f"{p['name']} (archived)" if p["archived"] else p["name"]
+        head = f"{name}: {p['percent']:.0f}% built, {p['complete_percent']:.0f}% complete" if p["units"] else name
         lines.append(f"{head} · {tally} · touched {ago(p['touched'])}")
         for s in p["live"]:
             stop = (s["run"].get("stop_reason") or {}) if "error" not in s else {}
@@ -1064,7 +1135,7 @@ STATE = {
     "rebriefing": ("run", "Planner rebriefing"), "briefing": ("run", "Planner briefing"), "owner-call": ("attn", "Rebrief needs your call"),
     "briefed": ("queued", "Briefed"),
     "built": ("built", "Awaiting acceptance"), "intake": ("intake", "With the Lead"), "complete": ("complete", "Complete"), "done": ("complete", "Done"),
-    "parked": ("idle", "Parked"), "todo": ("idle", "Not started"),
+    "parked": ("idle", "Parked"), "settled": ("idle", "Closed or moved"), "todo": ("idle", "Not started"),
 }
 RUN_UNIT_DOT = {"done": "complete", "building": "run", "gated": "run", "held": "run", "todo": "idle"}
 UNIT_PHRASE = {"building": "building", "gated": "passed review, closing", "done": "done", "todo": "not started"}
@@ -1610,6 +1681,11 @@ def page(title: str, crumbs: str, body: str, foot: str) -> str:
 <footer id="foot">{STAMP}<span>Updated {now} · refreshes every {REFRESH_SECONDS}s{foot}</span></footer></div><script>{SCRIPT}</script></body></html>"""
 
 
+def archived_mark(project: dict) -> str:
+    """The word `archived` beside an archived project's name, which shows only with live work, `--all` or by name."""
+    return ' <span class="muted">archived</span>' if project["archived"] else ""
+
+
 def tip_attrs(text: str) -> str:
     """A progress segment's label: shown at once by SCRIPT's tooltip, and read by screen readers."""
     return f'data-tip="{e(text)}" aria-label="{e(text)}" role="img"'
@@ -1959,7 +2035,7 @@ def quiet_row(project: dict, href: str) -> str:
         desc, pct = f"{complete} of {len(units)} units complete", f'{project["complete_percent"]:.0f}% complete · '
     else:
         desc, pct = f'No plan table · {len(project["sessions"])} sessions', ""
-    return (f'<a class="row" href="{e(href)}">{dot("idle")}<div class="main"><div class="name">{e(project["name"])}</div>'
+    return (f'<a class="row" href="{e(href)}">{dot("idle")}<div class="main"><div class="name">{e(project["name"])}{archived_mark(project)}</div>'
             f'<div class="desc">{e(desc)}</div></div><span class="state">{pct}{ago(project["touched"])}</span></a>')
 
 
@@ -1986,7 +2062,7 @@ def unit_state(u: dict) -> str:
 
 
 def is_stage_complete(units: list) -> bool:
-    return all(u["tone"] == "complete" for u in units)
+    return all(u["tone"] in ("complete", "settled") for u in units)
 
 
 def collapsed_stages(stages: list) -> set:
@@ -2232,12 +2308,12 @@ def project_crew(project: dict) -> str:
 def render_project_page(project: dict, index_href: str) -> str:
     units = project["units"]
     if units:
-        hero = (f'<section class="hero"><div class="hero-head"><h1>{e(project["name"])}</h1>'
+        hero = (f'<section class="hero"><div class="hero-head"><h1>{e(project["name"])}{archived_mark(project)}</h1>'
                 f'<div class="pct">{project["complete_percent"]:.0f}%<small>complete</small></div></div>{track(units, big=True)}{tally(units)}'
                 f'{hero_facts(project)}</section>')
         plan = render_plan(project)
     else:
-        hero = (f'<section class="hero"><h1>{e(project["name"])}</h1><p>PROJECT.md has no Task Breakdown table, so only sessions are shown.</p>'
+        hero = (f'<section class="hero"><h1>{e(project["name"])}{archived_mark(project)}</h1><p>PROJECT.md has no Task Breakdown table, so only sessions are shown.</p>'
                 f'{hero_facts(project)}</section>')
         plan = ""
     unplanned = ""
@@ -2295,7 +2371,7 @@ def render_index(projects: list, orphans: list, href) -> str:
         waiting_on_you = attention_rows([p], href)
         flag = (f'<span class="flag">{dot(waiting_on_you[0]["dot"])}{len(waiting_on_you)} need{"s" if len(waiting_on_you) == 1 else ""} attention</span>'
                 if waiting_on_you else "")
-        cards.append(f'<a class="proj" href="{e(href(p["name"]))}"><div class="proj-head"><span class="proj-name">{e(p["name"])}</span>{pct}</div>'
+        cards.append(f'<a class="proj" href="{e(href(p["name"]))}"><div class="proj-head"><span class="proj-name">{e(p["name"])}{archived_mark(p)}</span>{pct}</div>'
                      f'{body}<div class="tally" style="margin-top:6px">{flag}<span>Updated {ago(p["touched"])}</span></div></a>')
     if cards:
         listing = f'<h2>Live projects · {len(cards)}</h2><div class="projects">{"".join(cards)}</div>'
@@ -2328,15 +2404,15 @@ class Handler(BaseHTTPRequestHandler):
         if (self.headers.get("Host") or "").lower() not in (f"127.0.0.1:{port}", f"localhost:{port}"):
             body, status = "forbidden", 403
         elif path in ("", "/index.html"):
-            projects, orphans = load_world()
+            projects, orphans = load_world(None, self.server.shows_archived, self.server.verified)
             body, status = render_index(projects, orphans, project_link), 200
         elif path == "/attention.json":
-            projects, _ = load_world()
+            projects, _ = load_world(None, self.server.shows_archived, self.server.verified)
             rows = attention_rows(projects, project_link)
             body, status = json.dumps([{"key": f'{r["href"]}|{r["what"]}', "project": r["project"], "title": r["title"],
                                         "what": r["what"], "href": r["href"]} for r in rows]), 200
         elif path.startswith("/p/"):
-            projects, _ = load_world(only=path[3:])
+            projects, _ = load_world(path[3:], self.server.shows_archived, self.server.verified)
             body, status = (render_project_page(projects[0], "/"), 200) if projects else ("no such project", 404)
         else:
             body, status = "not found", 404
@@ -2353,9 +2429,11 @@ class Handler(BaseHTTPRequestHandler):
         return
 
 
-def serve(port: int) -> int:
+def serve(port: int, shows_archived: bool) -> int:
     try:
         server = HTTPServer(("127.0.0.1", port), Handler)
+        server.shows_archived = shows_archived
+        server.verified = {}
     except OSError as err:
         if err.errno not in (48, 98):
             raise
@@ -2369,9 +2447,9 @@ def serve(port: int) -> int:
     return 0
 
 
-def write_once(out: Path) -> int:
+def write_once(out: Path, shows_archived: bool) -> int:
     out.mkdir(parents=True, exist_ok=True)
-    projects, orphans = load_world()
+    projects, orphans = load_world(None, shows_archived, None)
     (out / "index.html").write_text(render_index(projects, orphans, lambda name: f"{quote(name, safe='')}.html"))
     for p in projects:
         (out / f"{p['name']}.html").write_text(render_project_page(p, "index.html"))
@@ -2384,6 +2462,7 @@ def main() -> int:
     parser.add_argument("project", nargs="?", help="one project folder name under the projects root")
     parser.add_argument("--serve", type=int, metavar="PORT")
     parser.add_argument("--once", type=Path, metavar="DIR")
+    parser.add_argument("--all", action="store_true", help="show archived projects and their sessions too")
     parser.add_argument("--runs-root", metavar="DIR",
                         help="the sessions root. Default: $ROBOWRIGHT_SESSIONS_ROOT, else sessions_root in launch.json")
     parser.add_argument("--projects-root", metavar="DIR",
@@ -2399,10 +2478,11 @@ def main() -> int:
                 or ROSTER.launch_path(LAUNCH_SETTINGS, "projects_root"))
     PROJECTS_ROOT = Path(projects) if projects else SESSIONS_ROOT.absolute().parent
     if args.serve:
-        return serve(args.serve)
+        return serve(args.serve, args.all)
     if args.once:
-        return write_once(args.once)
-    projects, orphans = load_world(only=args.project)
+        return write_once(args.once, args.all)
+    # Naming a project is asking for it, archived or not.
+    projects, orphans = load_world(args.project, args.all or args.project is not None, None)
     if args.project and not projects:
         print(f"no project folder {args.project} with a PROJECT.md under {PROJECTS_ROOT}", file=sys.stderr)
         return 2

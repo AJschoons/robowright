@@ -841,3 +841,86 @@ T1 red before the code: the row read `Not started`, no ticket claim for a sessio
 | # | Mutation | Predicted | Verdict |
 |---|---|---|---|
 | M1 | `ticket_of` returns `run.json.ticket` only, no slug fallback | T1 | match |
+
+## 061 · an archived project and its sessions left out (061-A1–A16) · 2026-10-23
+
+Red before the code: A1, A2, A5–A15, each on its Then (A10 waited on the FIFO until the subprocess timeout; A15's
+server refused `--all` and never answered). A3 and A4 were green at red: an unarchived project already shows.
+A16 was added after green, as a held-out row; M15 is its red.
+
+| # | Mutation | Predicted | Verdict |
+|---|---|---|---|
+| M1 | `load_world` keeps hidden projects in its project list | A1, A2, A5, A8, A10 | match |
+| M2 | `archived_mark` returns nothing | A6, A9, A13, A15 | match |
+| M3 | the text summary drops `(archived)` | A7, A12, A14 | match |
+| M4 | `is_archived` takes any truthy value | A3 | match |
+| M5 | `archived_projects` reads robowright.json with `read_text()`, links followed | A4 | match |
+| M6 | a parked session reads live | A8 | match |
+| M7 | a live direct build does not keep its project shown | A9 | match |
+| M8 | no session directory reads live | A6, A7 | match |
+| M9 | `load_sessions` loads a hidden project's sessions | A10, A11 | match |
+| M10 | the same for a folder with no run.json only | A10 | match |
+| M11 | naming a project does not show it when archived | A12 | match |
+| M12 | `--serve` ignores `--all` | A15 | match |
+| M13 | `--once` ignores `--all` | A13 | match |
+| M14 | the text summary ignores `--all` | A14 | match |
+| M15 | `direct_builds` lists a hidden project's `prs/` | A16 | match |
+
+A1's "no orphans" assertion is a declared guard: a hidden project's folder still exists, so its sessions never read as
+orphans unless `known` is built from the shown projects only, which no mutation here does.
+
+## 061 · settled statuses (061-C1–C8) · 2026-10-23
+
+Red before the code: C1–C3 and C5–C8, each on its Then. C4 was green at red: `Submitted` already read `not started`.
+
+| # | Mutation | Predicted | Verdict |
+|---|---|---|---|
+| M16 | `unit_progress` has no settled tone | C1, C2, C3, C5, C6, C7, C8 | match |
+| M17 | `moved` is not settled | C2, C3 | match |
+| M18 | the settled check reads the status before the strip | C3 | match |
+| M19 | a settled unit keeps its weight in `total` | C5 | match |
+| M20 | `is_stage_complete` takes only `complete` | C6 | match |
+| M21 | `PLAN_LABEL` reads a settled unit `not started` | C1, C2, C3, C7 | match |
+| M22 | `STATE` reads it `Not started` | C8 | match |
+| M23 | `submitted` is settled too | C4 | match |
+
+## 061 · verified in main, once per `--serve` process (061-D1–D5) · 2026-10-23
+
+Red before the code: D1 and D2, each on its Then (the second GET still named the branch, and the record's commit).
+D3 and D4 were green at red: every refresh already checked again. D5 is a declared guard. A held-out row, a direct
+build after teardown, served twice, passed and was dropped: it takes D1's path.
+
+| # | Mutation | Predicted | Verdict |
+|---|---|---|---|
+| M24 | `has_reached_main` never reads the `gone` id | D1 | match |
+| M25 | `has_reached_main` never holds the `gone` id | D1 | match |
+| M26 | `is_accept_recorded` never reads a verified record | D2 | match |
+| M27 | a record is matched by slug alone, not by its `sha` | D3 | match |
+| M28 | a branch not in main is held as a negative | D4 | match |
+| M29 | `--serve` holds no cache (`server.verified = None`) | D1, D2 | match |
+
+D5 is a declared guard: no compiling edit reddens it. It guards against a verified id kept on disk, where a session
+could plant one.
+
+### Review fix round (061-D6–D10)
+
+The gate review of D found three things.
+- F1: a `gone` or a record was held from a refresh in which a trusted repository could not answer.
+- F2: `gone` was read before the guards that cost no git call.
+- F3: two mutations survived.
+
+D6, D7 and D10 were red on their Thens before the fix; D10's baseline was taken on the D commit. D8 and D9 were green
+at red. D8's first Given landed through `has_reached_main` as well, so M33 left it green. It was re-cut so that only
+the record lands it: a pick on a side branch, then fast-forwarded into a moved main. This is a table change after red.
+
+| # | Mutation | Predicted | Verdict |
+|---|---|---|---|
+| M30 | `gone` held though a repository could not answer | D6 | match |
+| M31 | a record held though a repository could not answer | D10 | match |
+| M32 | `gone` read before the worktree-on-disk guard | D7 | match |
+| M33 | an unverified record held as a negative | D8 | mismatch on the first D8 (none), then match on the re-cut D8 |
+| M34 | `/p/<name>` passes no cache | D9 | match |
+| M35 | `/attention.json` passes no cache | D9 | match |
+
+M24, M25 and M29, run again on the fix, also redden D9. D9 takes the same `gone` path through the other routes, and it
+did not exist when those were predicted. M26–M28 match unchanged.

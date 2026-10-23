@@ -1823,5 +1823,159 @@ class GuardPricingTests(PricingReportCase):
         self.assertFalse((capped / "LEDGER.md").exists())
 
 
+
+class ArchivedProjectTests(RosterCase):
+    """061-B · the done and parked sessions of an archived project leave the roster. Project `sample` under a scratch
+    projects root with a PROJECT.md and robowright.json `{"archived": true}`; each session last written an hour ago by
+    the wall clock, inside the 48 h window; no live session, a scratch $HOME."""
+
+    FIRST = "sample-001-first"
+
+    def setUp(self):
+        super().setUp()
+        self.home = self.root.parent / "home"
+        self.home.mkdir()
+        self.plans = self.root.parent / "plans"
+        self.folder = self.plans / "sample"
+        self.folder.mkdir(parents=True)
+        (self.folder / "PROJECT.md").write_text(
+            "# Sample\n\n## Task Breakdown\n\n| # | Unit | Summary | Status |\n|---|---|---|---|\n"
+            "| U1 | `first` | The sample's first unit. | in progress |\n")
+        self.given_archived(True)
+
+    # ------------------------------------------------------------ given
+
+    def given_archived(self, value):
+        (self.folder / "robowright.json").write_text(json.dumps({"archived": value}) + "\n")
+
+    def given_session(self, name=FIRST, **fields):
+        """`name` last written an hour ago by the wall clock, every unit done unless fields say otherwise."""
+        values = {"units": ALL_DONE, "updated_at": iso(datetime.now(timezone.utc) - timedelta(hours=1))}
+        values.update(fields)
+        return self.given_run(name, **values)
+
+    # ------------------------------------------------------------ when
+
+    def roster(self, *args, timeout=60):
+        """run-roster.py over the scratch roots, with a scratch $HOME: no live sessions, no transcripts, no lead line."""
+        env = dict(os.environ, HOME=str(self.home), ROBOWRIGHT_SESSIONS_ROOT=str(self.root),
+                   ROBOWRIGHT_PROJECTS_ROOT=str(self.plans))
+        return subprocess.run([sys.executable, str(ROSTER_SCRIPT), "--runs-root", str(self.root), "--no-lead", *args],
+                              capture_output=True, text=True, env=env, timeout=timeout)
+
+    def table_rows(self, out, name=FIRST):
+        return [line for line in out.splitlines() if line.startswith(f"| {name} ")]
+
+    # ------------------------------------------------------------ then
+
+    def test_roster__leaves_out_a_done_session__when_its_project_is_archived(self):
+        """061-B1 — a done session of an archived project is off the roster — the Lead's watch lists a closed project's sessions every tick."""
+        self.given_session(phase="done")
+
+        done = self.roster()
+
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn(self.FIRST, done.stdout)
+
+    def test_roster__leaves_out_a_parked_session__when_its_project_is_archived(self):
+        """061-B2 — a parked session of an archived project gets no row and no parked: line — a closed project's park reminder prints forever."""
+        self.given_session(phase="parked", parked={"by": "owner", "reason": REASON, "at": iso(datetime.now(timezone.utc)),
+                                                   "from": "done", "released": []})
+
+        done = self.roster()
+
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn(self.FIRST, done.stdout)
+
+    def test_roster__lists_a_done_session_of_an_archived_project__with_all(self):
+        """061-B3 — `--all` brings an archived project's done session back — the Lead cannot see a closed project's sessions at all."""
+        self.given_session(phase="done")
+
+        done = self.roster("--all")
+
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(len(self.table_rows(done.stdout)), 1, done.stdout)
+
+    def test_roster__lists_a_done_session_of_an_archived_project__when_only_names_it(self):
+        """061-B4 — `--only <name>` brings an archived project's done session back — asking for a session by name prints nothing."""
+        self.given_session(phase="done")
+
+        done = self.roster("--only", self.FIRST)
+
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(len(self.table_rows(done.stdout)), 1, done.stdout)
+
+    def test_roster__flags_a_live_session__when_its_project_is_archived(self):
+        """061-B5 — a live session of an archived project stays listed, flagged `archived project` — archiving its own project hides a running session from the Lead."""
+        self.given_session(phase="implement", units=[{"id": "U1", "status": "done"}, {"id": "U2", "status": "todo"}])
+
+        done = self.roster("--json")
+
+        self.assertEqual(done.returncode, 0, done.stderr)
+        rows = {r["run"]: r for r in json.loads(done.stdout)["runs"]}
+        self.assertIn("archived project", rows[self.FIRST]["flags"])
+
+    def test_roster__lists_a_done_session__when_archived_is_not_json_true(self):
+        """061-B6 — only the JSON `true` archives a project — the string "true" hides a project the Owner never closed."""
+        self.given_archived("true")
+        self.given_session(phase="done")
+
+        done = self.roster()
+
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(len(self.table_rows(done.stdout)), 1, done.stdout)
+
+    def test_roster__lists_a_done_session__when_robowright_json_is_a_link(self):
+        """061-B7 — a robowright.json that is a link is refused and archives nothing — a link a session plants hides the project."""
+        outside = self.root.parent / "outside.json"
+        outside.write_text(json.dumps({"archived": True}) + "\n")
+        (self.folder / "robowright.json").unlink()
+        (self.folder / "robowright.json").symlink_to(outside)
+        self.given_session(phase="done")
+
+        done = self.roster()
+
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(len(self.table_rows(done.stdout)), 1, done.stdout)
+
+    def test_roster__leaves_out_a_done_session__when_run_json_files_it_under_an_archived_project(self):
+        """061-B8 — `run.json.project` files a session under an archived project whatever its directory is named — a session outside the name form escapes the rule."""
+        self.given_session("notes-001-first", phase="done", project="sample")
+
+        done = self.roster()
+
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("notes-001-first", done.stdout)
+
+    def test_roster__reads_nothing_past_run_json__for_a_done_session_of_an_archived_project(self):
+        """061-B9 — the skip runs before describe(), so nothing past run.json is read — every tick still reads a closed project's ledgers and transcripts."""
+        run_dir, _ = self.given_session(phase="done")
+        for name in ("LEDGER.md", "events.jsonl"):
+            os.mkfifo(Path(run_dir) / name)
+
+        try:
+            done = self.roster(timeout=20)
+        except subprocess.TimeoutExpired:
+            done = None
+
+        self.assertIsNotNone(done, "the roster waited on a FIFO in an archived project's session")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn(self.FIRST, done.stdout)
+
+    def test_roster__since_reports_a_session_gone_once__when_its_project_is_archived(self):
+        """061-B10 — under `--since`, a session whose project is archived prints `no longer on the roster` once — the Lead never learns it left, or hears it every tick."""
+        self.given_archived(False)
+        self.given_session(phase="done")
+        since = self.root.parent / "roster-since.json"
+        self.roster("--since", str(since))
+        self.given_archived(True)
+        gone = f"{self.FIRST}: no longer on the roster"
+
+        first, second = self.roster("--since", str(since)), self.roster("--since", str(since))
+
+        self.assertEqual(first.stdout.count(gone), 1, first.stdout)
+        self.assertNotIn(gone, second.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

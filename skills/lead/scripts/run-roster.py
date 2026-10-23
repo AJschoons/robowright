@@ -86,6 +86,18 @@ def load_state_tool():
 
 
 STATE = load_state_tool()
+
+
+def load_owner_git():
+    """owner_git.py reads a session-writable file without following a link or waiting on a FIFO."""
+    path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../robowright/scripts/owner_git.py")
+    spec = importlib.util.spec_from_file_location("owner_git", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+OWNER_GIT = load_owner_git()
 STATE_TABLE = STATE.load_table()
 RECENT_TERMINAL = timedelta(hours=48)
 QUIET_AFTER = timedelta(hours=2)
@@ -564,14 +576,45 @@ def owned_numbers(status):
     return numbers
 
 
+def is_archived(settings):
+    """A project's parsed robowright.json archives it with the JSON value `true` and nothing else."""
+    return isinstance(settings, dict) and settings.get("archived") is True
+
+
+def filed_project(run_dir, run):
+    """The project a session is filed under: run.json.project when it is a non-empty string, else the directory name's group."""
+    project = run.get("project")
+    if isinstance(project, str) and project:
+        return project
+    match = GROUP_REGEX.match(os.path.basename(run_dir))
+    return match.group(1) if match else None
+
+
+def plan_root(run_dir):
+    """The projects root: main()'s, else the sessions root's parent."""
+    return PLAN_ROOT or os.path.dirname(os.path.dirname(os.path.abspath(run_dir)))
+
+
+def is_archived_project(project, root, seen):
+    """Whether `<root>/<project>/robowright.json` archives the project, `project` an entry of the root's own listing; read
+    once a run per project, through owner_git.read_unlinked, and held in `seen`. A refused or malformed read is not
+    archived."""
+    if (root, project) not in seen:
+        try:
+            listed = project in os.listdir(root) if project else False
+            data = OWNER_GIT.read_unlinked(os.path.join(os.path.realpath(root), project, "robowright.json")) if listed else b"{}"
+            settings = json.loads(data)
+        except (OSError, ValueError, RecursionError, OWNER_GIT.Unreadable):
+            settings = {}
+        seen[(root, project)] = is_archived(settings)
+    return seen[(root, project)]
+
+
 def plan_label(run_dir, run):
     """`U12 (note-autosave)`, contract 11's form, for the plan row this session belongs to; None when none maps."""
     slug = os.path.basename(run_dir)
-    project = run.get("project")
-    if not (isinstance(project, str) and project):
-        match = GROUP_REGEX.match(slug)
-        project = match.group(1) if match else None
-    root = PLAN_ROOT or os.path.dirname(os.path.dirname(os.path.abspath(run_dir)))
+    project = filed_project(run_dir, run)
+    root = plan_root(run_dir)
     try:
         if not project or project not in os.listdir(root):
             return None
@@ -753,7 +796,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--runs-root", action="append", default=None,
                     help="session directories live under this root; repeatable. Default: $ROBOWRIGHT_SESSIONS_ROOT, else sessions_root in launch.json")
-    ap.add_argument("--all", action="store_true", help="include every terminal Robowright Session, not just recent ones")
+    ap.add_argument("--all", action="store_true",
+                    help="include every terminal Robowright Session, not just recent ones, and the sessions of archived projects")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--only", action="append", default=None, help="session directory name(s); repeatable")
     ap.add_argument("--lead", dest="lead", default=None, metavar="NAME", help="this session's name (from ListAgents) for the lead: line")
@@ -788,6 +832,7 @@ def main():
     # --json `parked` entry however old, under --since whenever its fingerprint changed.
     faded_parked = []
     run_jsons = []
+    archived = {}
     for root in roots:
         run_jsons += glob.glob(os.path.join(root, "*", "run.json"))
     for run_json in sorted(run_jsons):
@@ -800,12 +845,19 @@ def main():
         except (OSError, json.JSONDecodeError) as e:
             print(f"{os.path.basename(run_dir)}: unreadable run.json ({e})", file=sys.stderr)
             continue
+        is_settled = isinstance(run, dict) and run.get("phase") in ("done", "parked")
+        is_in_archived = isinstance(run, dict) and is_archived_project(filed_project(run_dir, run), plan_root(run_dir), archived)
+        # Before describe(): a finished session of an archived project costs its run.json and nothing more.
+        if is_in_archived and is_settled and not (args.all or args.only):
+            continue
         try:
             row = describe(run_dir, run, sessions, now)
         except Exception as e:  # one unreadable session must not blind the Lead to the rest
             print(f"{os.path.basename(run_dir)}: could not be described ({type(e).__name__}: {e})", file=sys.stderr)
             row = dict.fromkeys(("spend_usd", "requests", "tokens_out", "spend_cap_usd", "spend_threshold_usd", "ticket", "state", "current_unit", "plan_unit", "stop_detail", "session_name", "session_status", "session_id", "updated_at", "worktree"))
             row.update(run=os.path.basename(run_dir), run_dir=run_dir, phase=str(run.get("phase")), units_done=0, units_total=0, verdict="invalid:unreadable", flags=[], updated_age="?", last_ledger="", prs=[])
+        if is_in_archived and not is_settled:
+            row["flags"].append("archived project")
         updated = parse_iso(run.get("updated_at")) or datetime.fromtimestamp(os.path.getmtime(run_json), timezone.utc)
         if not visible(row, updated, now, show_all=args.all or bool(args.only)):
             if row["verdict"] == "parked":

@@ -7232,5 +7232,567 @@ class DirectBuildShown(CrewScratch):
         self.assertIn("with the Lead", unit_line(result.stdout, "U1"))
 
 
+
+# ---------------------------------------------------------------- 061 · an archived project and its sessions left out
+
+
+class ArchivedProject(CrewScratch):
+    """061-A rows: project `sample` (U1 `first`) archived by its robowright.json; project `notes`, not archived, with
+    one unit and no sessions; SLUG filed under `sample`."""
+
+    def setUp(self):
+        super().setUp()
+        self.folder = self.given_project()
+        self.given_settings(self.folder, "robowright.json", {"archived": True})
+        self.given_project(name="notes")
+
+    def lines(self, result):
+        return text_of(result.stdout).splitlines()
+
+    def serve_and_get(self, port, path, *flags):
+        """`--serve PORT` with `flags`, one GET of `path` once it answers, then stopped: (status, body), or None when
+        the server never answered."""
+        server = subprocess.Popen([sys.executable, str(DASH), "--serve", str(port), *flags], stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL, env=self.env(), cwd=str(self.cwd))
+        self.addCleanup(lambda: server.poll() is None and server.kill())
+        answer = None
+        deadline = time.monotonic() + 20
+        while answer is None and server.poll() is None and time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=20) as response:
+                    answer = (response.status, response.read().decode())
+            except urllib.error.HTTPError as err:
+                answer = (err.code, err.read().decode())
+            except (urllib.error.URLError, ConnectionError):
+                time.sleep(0.1)
+        server.terminate()
+        server.wait(timeout=10)
+        return answer
+
+    def run_dash_recording_git(self, *args):
+        bin_dir = self.base / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "git").write_text(RECORDING_GIT)
+        (bin_dir / "git").chmod(0o755)
+        log = self.base / "git-argv.log"
+        env = dict(self.env(), PATH=f"{bin_dir}:{os.environ['PATH']}", GIT_ARGV_LOG=str(log))
+        result = subprocess.run([sys.executable, str(DASH), *args], capture_output=True, text=True, env=env,
+                                cwd=str(self.cwd), timeout=60)
+        return result, git_calls(log)
+
+    def test_writes_no_page_and_no_orphan_for_it__when_a_finished_project_is_archived(self):
+        """061-A1 — an archived project's finished work leaves the pages — the Owner keeps scrolling past a closed project, or its sessions turn up as orphans."""
+        self.given_finished_session()
+
+        self.when_written()
+
+        self.assertFalse((self.out / "sample.html").exists())
+        self.assertNotIn('href="sample.html', self.index)
+        self.assertNotIn("Sessions with no project folder", self.index)
+        self.assertIn('href="notes.html"', self.index)
+
+    def test_prints_no_line_for_it__when_a_finished_project_is_archived(self):
+        """061-A2 — the text summary leaves an archived project out — the terminal summary still lists a closed project."""
+        self.given_finished_session()
+
+        result = self.run_dash()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([line for line in self.lines(result) if line.startswith("sample")], [])
+        self.assertEqual([line for line in self.lines(result) if line.startswith("no project folder")], [])
+        self.assertTrue(any(line.startswith("notes:") for line in self.lines(result)), result.stdout)
+
+    def test_shows_the_project_unmarked__when_archived_is_anything_but_json_true(self):
+        """061-A3 — only the JSON `true` archives a project — a stray `1` or `"yes"` hides a project the Owner never closed."""
+        self.given_finished_session()
+        for value in (1, "true", "yes", [True], None):
+            with self.subTest(archived=value):
+                self.given_settings(self.folder, "robowright.json", {} if value is None else {"archived": value})
+
+                result = self.run_dash()
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(any(line.startswith("sample:") for line in self.lines(result)), result.stdout)
+                self.assertNotIn("archived", result.stdout)
+
+    def test_shows_the_project__when_its_robowright_json_is_a_link_to_an_archived_flag(self):
+        """061-A4 — a robowright.json read refused as a link archives nothing — a link a session plants hides the project."""
+        outside = self.base / "outside"
+        outside.mkdir()
+        self.given_settings(outside, "kept.json", {"archived": True})
+        (self.folder / "robowright.json").unlink()
+        (self.folder / "robowright.json").symlink_to(outside / "kept.json")
+        self.given_finished_session()
+
+        result = self.run_dash()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(any(line.startswith("sample:") for line in self.lines(result)), result.stdout)
+
+    def test_answers_404__when_the_page_of_an_archived_project_is_asked_for(self):
+        """061-A5 — `/p/<name>` of an archived project is 404 `no such project` — a bookmark still serves the closed project's page, git checks and all."""
+        self.given_finished_session()
+
+        answer = self.serve_and_get(free_port(), "/p/sample")
+
+        self.assertEqual(answer, (404, "no such project"))
+
+    def test_shows_the_project_marked_archived__when_a_session_of_it_is_live(self):
+        """061-A6 — a live session keeps an archived project on the pages, marked `archived` — a session can hide itself from the watch by archiving its own project."""
+        for phase in ("implement", "stopped"):
+            with self.subTest(phase=phase):
+                shutil.rmtree(self.sessions / SLUG, ignore_errors=True)
+                shutil.rmtree(self.out, ignore_errors=True)
+                self.given_session(phase=phase)
+
+                self.when_written()
+
+                self.assertIn("sample archived", Page(self.out / "sample.html").text())
+                self.assertIn("sample archived", Page(self.out / "index.html").text())
+
+    def test_prints_the_project_marked_archived__when_a_session_of_it_is_live(self):
+        """061-A7 — the text summary keeps an archived project with a live session, marked `archived` — the terminal hides running work."""
+        self.given_session()
+
+        result = self.run_dash()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        head = next((line for line in self.lines(result) if line.startswith("sample")), "")
+        self.assertRegex(head, r"^sample\W+archived\b")
+        self.assertIn(SLUG, result.stdout)
+
+    def test_writes_no_page_for_it__when_its_only_session_is_parked(self):
+        """061-A8 — a parked session is not live work — an archived project with a parked session never leaves the pages."""
+        self.given_session(phase="parked")
+
+        self.when_written()
+
+        self.assertFalse((self.out / "sample.html").exists())
+
+    def test_shows_the_project_marked_archived__when_a_direct_build_of_it_is_live(self):
+        """061-A9 — a live direct build keeps an archived project on the pages, marked `archived` — a direct build, which has no session folder, hides itself."""
+        self.given_running_direct_build()
+
+        self.when_written()
+
+        self.assertTrue((self.out / "sample.html").is_file())
+        self.assertIn("sample archived", Page(self.out / "index.html").text())
+
+    def test_reads_nothing_but_run_json__for_a_session_of_an_archived_project(self):
+        """061-A10 — a hidden project's session costs its run.json read and nothing else — every refresh still reads every ledger of a closed project."""
+        run_dir = self.given_finished_session()
+        for name in ("LEDGER.md", "events.jsonl"):
+            (run_dir / name).unlink(missing_ok=True)
+            os.mkfifo(run_dir / name)
+        briefing = self.sessions / SECOND
+        briefing.mkdir()
+        os.mkfifo(briefing / "LEDGER.md")
+        self.given_live_agent(f"planner-{SECOND}", "busy", cwd=self.cwd)
+
+        try:
+            result = self.run_dash("--once", str(self.out), timeout=20)
+        except subprocess.TimeoutExpired:
+            result = None
+
+        self.assertIsNotNone(result, "the run waited on a FIFO in a hidden session")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.out / "sample.html").exists())
+        self.assertNotIn("Planner briefing", self.pages())
+
+    def test_runs_no_git_for_it__when_a_session_of_an_archived_project_is_finished(self):
+        """061-A11 — a hidden project's finished session costs no git call — every refresh still runs merge-base for a closed project."""
+        repo = self.given_repo(f"robowright/{SLUG}", merged=False)
+        worktree = self.base / "worktrees" / SLUG
+        self.git(repo, "worktree", "add", "-q", str(worktree), f"robowright/{SLUG}")
+        self.given_settings(self.folder, "robowright.json",
+                            {"archived": True, "repos": [{"name": "sample", "path": str(repo)}]})
+        self.given_allowlisted(repo)
+        self.given_finished_session(worktree=str(worktree))
+
+        result, calls = self.run_dash_recording_git("--once", str(self.out))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([c for c in calls if runs_in(c, worktree) or any(SLUG in arg for arg in c)], [])
+
+    def test_runs_no_git_for_it__when_a_direct_build_of_an_archived_project_is_finished(self):
+        """061-A16 — a hidden project's finished direct build costs no git call — every refresh still checks a closed project's accept record."""
+        repo = self.given_repo(f"robowright/{SLUG}", merged=False)
+        self.given_settings(self.folder, "robowright.json",
+                            {"archived": True, "repos": [{"name": "sample", "path": str(repo)}]})
+        self.given_allowlisted(repo)
+        main_tip = subprocess.run(["git", "-C", str(repo), "rev-parse", "main"], capture_output=True, text=True,
+                                  env=self.env(), check=True, timeout=30).stdout.strip()
+        prs = self.folder / "prs"
+        (prs / SLUG).mkdir(parents=True)
+        (prs / f"{SLUG}.md").write_text("# Change description\n")
+        (prs / SLUG / "ACCEPTED.json").write_text(json.dumps({"sha": main_tip}) + "\n")
+
+        result, calls = self.run_dash_recording_git("--once", str(self.out))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([c for c in calls if any(SLUG in arg for arg in c)], [])
+
+    def test_prints_the_project_marked_archived__when_it_is_named(self):
+        """061-A12 — naming an archived project shows it, marked `archived` — the Owner cannot read a closed project's plan at all."""
+        self.given_finished_session()
+
+        result = self.run_dash("sample")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(self.lines(result)[0], r"^sample\W+archived\b")
+
+    def test_writes_the_project_marked_archived__when_once_runs_with_all(self):
+        """061-A13 — `--all` writes an archived project's page, marked `archived` — nothing brings a closed project back to the pages."""
+        self.given_finished_session()
+
+        result = self.run_dash("--all", "--once", str(self.out))
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.out / "sample.html").is_file())
+        self.assertIn("sample archived", Page(self.out / "index.html").text())
+
+    def test_prints_the_project_marked_archived__when_the_summary_runs_with_all(self):
+        """061-A14 — `--all` prints an archived project, marked `archived` — the terminal summary cannot show a closed project."""
+        self.given_finished_session()
+
+        result = self.run_dash("--all")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        head = next((line for line in self.lines(result) if line.startswith("sample")), "")
+        self.assertRegex(head, r"^sample\W+archived\b")
+
+    def test_serves_the_project_page_marked_archived__when_serve_runs_with_all(self):
+        """061-A15 — `--serve --all` serves an archived project's page, marked `archived` — the served dashboard cannot show a closed project."""
+        self.given_finished_session()
+
+        answer = self.serve_and_get(free_port(), "/p/sample", "--all")
+
+        self.assertIsNotNone(answer, "the server never answered")
+        status, body = answer
+        self.assertEqual(status, 200)
+        self.assertIn("sample archived", " ".join(html.unescape(re.sub(r"<[^>]+>", " ", body)).split()))
+
+
+# ---------------------------------------------------------------- 061 · settled statuses
+
+
+SETTLED_HEADER = "| # | Unit | Description | Repo | Size | Complexity | Status |"
+SETTLED_ROWS = ("| U1 | `first` | The sample's first unit | sample | S | low | Done |",
+                "| U2 | `second` | The sample's second unit | sample | M | low | Closed |",
+                "| U3 | `third` | The sample's third unit | sample | L | low | Moved to the notes project |",
+                "| U4 | `fourth` | The sample's fourth unit | sample | S | low | **Moved** |",
+                "| U5 | `fifth` | The sample's fifth unit | sample | XS | low | Submitted |")
+STAGED_PLAN = ("\n## Detailed TODO\n\n### Stage 1 — first\n\n- **U1** the first unit\n- **U2** the second unit\n\n"
+               "### Stage 2 — next\n\n- **U3** the third unit\n")
+
+
+class SettledStatus(GlyphScratch):
+    """061-C rows: a unit with no session whose Status begins `closed` or `moved` reads `closed or moved` and weighs
+    nothing. Project `sample`; its Task Breakdown is each test's own."""
+
+    def given_plan(self, *rows, todo=""):
+        folder = self.projects / "sample"
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "PROJECT.md").write_text(project_md(SETTLED_HEADER, *rows) + todo)
+
+    def given_staged_plan(self):
+        """Stage 1: U1 done and U2 closed; Stage 2: U3 not started in the plan, its session implementing."""
+        self.given_plan(SETTLED_ROWS[0], SETTLED_ROWS[1], "| U3 | `third` | The sample's third unit | sample | L | low | todo |",
+                        todo=STAGED_PLAN)
+        self.given_session(slug="sample-003-third")
+
+    def detailed(self):
+        result = self.run_dash("sample")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_reads_a_unit_closed_or_moved__when_its_status_says_closed(self):
+        """061-C1 — a `Closed` unit reads `closed or moved` — finished-elsewhere work counts as not started forever."""
+        self.given_plan(*SETTLED_ROWS)
+
+        self.assertIn("closed or moved", unit_line(self.detailed(), "U2"))
+
+    def test_reads_a_unit_closed_or_moved__when_its_status_says_moved_to_another_project(self):
+        """061-C2 — a `Moved to …` unit reads `closed or moved` — work handed to another project counts as open here."""
+        self.given_plan(*SETTLED_ROWS)
+
+        self.assertIn("closed or moved", unit_line(self.detailed(), "U3"))
+
+    def test_reads_a_unit_closed_or_moved__when_its_status_is_bold(self):
+        """061-C3 — a `**Moved**` unit reads `closed or moved`, after the same strip as `done` — a bold status escapes the rule."""
+        self.given_plan(*SETTLED_ROWS)
+
+        self.assertIn("closed or moved", unit_line(self.detailed(), "U4"))
+
+    def test_reads_a_unit_not_started__when_its_status_says_submitted(self):
+        """061-C4 — `Submitted` stays `not started` — a third settled word, which the scope leaves out, slips in."""
+        self.given_plan(*SETTLED_ROWS)
+
+        self.assertIn("not started", unit_line(self.detailed(), "U5"))
+
+    def test_reads_the_plan_complete__when_every_unit_but_a_closed_one_is_done(self):
+        """061-C5 — a closed unit leaves the plan's weight, so the rest done reads 100% — a closed project never reaches 100%."""
+        self.given_plan(SETTLED_ROWS[0], SETTLED_ROWS[1])
+
+        result = self.run_dash()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stdout, r"(?m)^sample: 100% built, 100% complete ")
+
+    def test_folds_a_stage__when_its_units_are_complete_or_closed(self):
+        """061-C6 — a stage of done and closed units is complete, and folds once a later stage starts — a closed unit holds its stage open forever."""
+        self.given_staged_plan()
+
+        self.when_written()
+
+        self.assertIs(Page(self.out / "sample.html").is_open("stage-Stage-1"), False)
+
+    def test_counts_the_closed_unit_in_the_legend__on_the_project_page(self):
+        """061-C7 — the project page's legend counts `1 closed or moved` — the bar draws a grey segment the legend never names."""
+        self.given_staged_plan()
+
+        self.when_written()
+
+        self.assertIn("1 closed or moved", " ".join(Page(self.out / "sample.html").texts("tally")))
+
+    def test_counts_the_closed_unit_on_the_index_card(self):
+        """061-C8 — the index card's count line counts `1 Closed or moved` — the card's count line misses a unit its bar draws."""
+        self.given_staged_plan()
+
+        self.when_written()
+
+        self.assertIn("1 Closed or moved", " ".join(Page(self.out / "index.html").texts("tally")))
+
+
+# ---------------------------------------------------------------- 061-D · verified in main, once per --serve process
+
+
+class InMainCache(DashScratch):
+    """061-D rows: under `--serve`, a finished session verified in main costs no git call again in that process; a
+    negative, or a record naming another id, is checked again on the next refresh. Project `sample` names one trusted
+    scratch repository."""
+
+    given_trusted_repo = InMainTruth.given_trusted_repo
+    given_outside_worktree = InMainTruth.given_outside_worktree
+    given_change_description = InMainTruth.given_change_description
+    given_picked_onto_a_moved_main = DirectAccept.given_picked_onto_a_moved_main
+    given_record = DirectAccept.given_record
+    rev = DirectAccept.rev
+
+    def given_finished_session_without_worktree(self):
+        """SLUG done and through intake, its worktree removed: a path with nothing on disk."""
+        self.given_finished_session(worktree=str(self.base / "removed" / SLUG))
+
+    def serve_twice_recording_git(self, path, between):
+        """`--serve PORT` with a recording git on `PATH`: GET `path`, run `between`, GET `path` again, then stopped. Returns
+        (the first body, the second body, the git calls the second GET made), or None when the server never answered."""
+        bin_dir = self.base / "bin"
+        bin_dir.mkdir(exist_ok=True)
+        (bin_dir / "git").write_text(RECORDING_GIT)
+        (bin_dir / "git").chmod(0o755)
+        log = self.base / "git-argv.log"
+        env = dict(self.env(), PATH=f"{bin_dir}:{os.environ['PATH']}", GIT_ARGV_LOG=str(log))
+        port = free_port()
+        server = subprocess.Popen([sys.executable, str(DASH), "--serve", str(port)], stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL, env=env, cwd=str(self.cwd))
+        self.addCleanup(lambda: server.poll() is None and server.kill())
+        url = f"http://127.0.0.1:{port}{path}"
+        first = None
+        deadline = time.monotonic() + 20
+        while first is None and server.poll() is None and time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(url, timeout=20) as response:
+                    first = response.read().decode()
+            except (urllib.error.URLError, ConnectionError):
+                time.sleep(0.1)
+        if first is None:
+            server.kill()
+            return None
+        before = len(git_calls(log))
+        between()
+        with urllib.request.urlopen(url, timeout=20) as response:
+            second = response.read().decode()
+        calls = git_calls(log)[before:]
+        server.terminate()
+        server.wait(timeout=10)
+        return first, second, calls
+
+    def completion(self, body):
+        """`sample`'s percent complete on the index, from its quiet row or its live card, as `<n>%`."""
+        found = re.search(r'href="/p/sample">.*?([0-9]+%)', body, re.S)
+        return found.group(1) if found else ""
+
+    def names_branch(self, calls):
+        return [c for c in calls if any(f"refs/heads/{BRANCH}" in arg for arg in c)]
+
+    def test_runs_no_git_for_it_on_the_next_refresh__when_its_branch_was_verified_gone(self):
+        """061-D1 — a finished session whose branch is gone from every trusted repository reads complete on the next refresh with no git call for its branch — every refresh of the served dashboard asks each trusted repository again for every finished session."""
+        self.given_trusted_repo()
+        self.given_finished_session_without_worktree()
+        self.git(self.repo, "branch", "-D", BRANCH)
+
+        answer = self.serve_twice_recording_git("/", lambda: None)
+
+        self.assertIsNotNone(answer, "the server never answered")
+        first, second, calls = answer
+        self.assertEqual(self.completion(first), "100%")
+        self.assertEqual(self.completion(second), "100%")
+        self.assertEqual(self.names_branch(calls), [])
+
+    def test_runs_no_git_for_its_record_on_the_next_refresh__when_its_accept_record_was_verified(self):
+        """061-D2 — a direct build whose accept record was verified on main reads complete on the next refresh with no git call naming the record's commit — a verified accept is checked again, patch-id and all, on every refresh."""
+        self.given_picked_onto_a_moved_main()
+        sha = self.rev("rev-parse", "main")
+        self.given_record(sha)
+
+        answer = self.serve_twice_recording_git("/", lambda: None)
+
+        self.assertIsNotNone(answer, "the server never answered")
+        first, second, calls = answer
+        self.assertEqual(self.completion(first), "100%")
+        self.assertEqual(self.completion(second), "100%")
+        self.assertEqual([c for c in calls if any(sha in arg for arg in c)], [])
+
+    def test_checks_the_record_again__when_it_is_rewritten_to_another_commit_after_it_was_verified(self):
+        """061-D3 — a verified accept record rewritten to the branch tip, a commit main does not hold, reads with the Lead on the next refresh — a session could swap its record once it was trusted and land anything."""
+        self.given_picked_onto_a_moved_main()
+        self.given_record(self.rev("rev-parse", "main"))
+        tip = self.rev("rev-parse", BRANCH)
+
+        answer = self.serve_twice_recording_git("/", lambda: self.given_record(tip))
+
+        self.assertIsNotNone(answer, "the server never answered")
+        first, second, _ = answer
+        self.assertEqual(self.completion(first), "100%")
+        self.assertEqual(self.completion(second), "0%")
+
+    def test_reads_it_complete_on_the_next_refresh__when_its_branch_is_accepted_after_a_refresh_found_it_not_in_main(self):
+        """061-D4 — a finished session whose branch was not in main reads complete on the next refresh once the branch is merged — a remembered negative would hide the Owner's accept for the life of the server."""
+        self.given_trusted_repo()
+        self.given_finished_session_without_worktree()
+
+        answer = self.serve_twice_recording_git("/", lambda: self.git(self.repo, "merge", "-q", "--ff-only", BRANCH))
+
+        self.assertIsNotNone(answer, "the server never answered")
+        first, second, _ = answer
+        self.assertEqual(self.completion(first), "0%")
+        self.assertEqual(self.completion(second), "100%")
+
+    def test_checks_the_branch_again__in_a_new_serve_process(self):
+        """061-D5 — a second `--serve` process asks git for the branch again on its first refresh, though the first process verified it gone — declared guard: no compiling edit reddens it; it guards against a verified id kept on disk, where a session could plant one (D3: "No file")."""
+        self.given_trusted_repo()
+        self.given_finished_session_without_worktree()
+        self.git(self.repo, "branch", "-D", BRANCH)
+        self.assertIsNotNone(self.serve_twice_recording_git("/", lambda: None), "the first server never answered")
+        log = self.base / "git-argv.log"
+        log.unlink()
+
+        answer = self.serve_twice_recording_git("/", lambda: None)
+
+        self.assertIsNotNone(answer, "the second server never answered")
+        self.assertNotEqual(self.names_branch(git_calls(log)), [])
+
+    def given_second_trusted_repo_holding_the_branch(self):
+        """Project `notes` naming a second trusted scratch repository that holds `robowright/<SLUG>`, not in its main."""
+        notes = self.given_project(name="notes")
+        second = self.base / "repos" / "second"
+        second.mkdir(parents=True)
+        self.git(second, "init", "-q", "-b", "main")
+        (second / "README.md").write_text("second\n")
+        self.git(second, "add", "README.md")
+        self.git(second, "commit", "-q", "-m", "base")
+        self.git(second, "branch", BRANCH)
+        self.git(second, "checkout", "-q", BRANCH)
+        (second / "first.txt").write_text("the first unit, elsewhere\n")
+        self.git(second, "add", "first.txt")
+        self.git(second, "commit", "-q", "-m", "first")
+        self.git(second, "checkout", "-q", "main")
+        self.given_settings(notes, "robowright.json", {"repos": [{"name": "second", "path": str(second)}]})
+        self.given_allowlisted(self.repo, second)
+        return second
+
+    def test_checks_the_branch_again__when_a_trusted_repository_could_not_answer_the_refresh_that_found_it_gone(self):
+        """061-D6 — a branch read as gone while another trusted repository could not answer is asked about again on the next refresh, and reads not in main once that repository answers that it holds the branch — one failed git call would land unaccepted work for the life of the server."""
+        self.given_trusted_repo()
+        self.given_finished_session_without_worktree()
+        self.git(self.repo, "branch", "-D", BRANCH)
+        second = self.given_second_trusted_repo_holding_the_branch()
+        head = second / ".git" / "HEAD"
+        good = head.read_text()
+        head.write_text("not a ref\n")
+
+        answer = self.serve_twice_recording_git("/", lambda: head.write_text(good))
+
+        self.assertIsNotNone(answer, "the server never answered")
+        first, second_body, _ = answer
+        self.assertEqual(self.completion(first), "100%")
+        self.assertEqual(self.completion(second_body), "0%")
+
+    def test_reads_it_not_in_main__when_its_worktree_is_back_on_disk_after_its_branch_was_verified_gone(self):
+        """061-D7 — a session verified gone whose `run.json` worktree is on disk again reads not in main on the next refresh — a slug relaunched under the same server reads its new, unaccepted work as complete."""
+        self.given_trusted_repo()
+        worktree = self.base / "removed" / SLUG
+        self.given_finished_session(worktree=str(worktree))
+        self.git(self.repo, "branch", "-D", BRANCH)
+
+        answer = self.serve_twice_recording_git("/", lambda: worktree.mkdir(parents=True))
+
+        self.assertIsNotNone(answer, "the server never answered")
+        first, second, _ = answer
+        self.assertEqual(self.completion(first), "100%")
+        self.assertEqual(self.completion(second), "0%")
+
+    def test_reads_a_direct_build_complete_on_the_next_refresh__when_the_commit_its_record_names_reaches_main(self):
+        """061-D8 — a direct build whose record names a cherry-pick of its branch, not yet on a main that moved, reads complete on the next refresh once main is fast-forwarded to that pick — a remembered unverified record would hide the Owner's accept for the life of the server."""
+        self.given_trusted_repo()
+        self.given_outside_worktree()
+        self.given_change_description()
+        (self.repo / "CHANGELOG.md").write_text("main moves on\n")
+        self.git(self.repo, "add", "CHANGELOG.md")
+        self.git(self.repo, "commit", "-q", "-m", "main moves on")
+        self.git(self.repo, "checkout", "-q", "-b", "pick")
+        self.git(self.repo, "cherry-pick", BRANCH)
+        self.git(self.repo, "checkout", "-q", "main")
+        self.given_record(self.rev("rev-parse", "pick"))
+
+        answer = self.serve_twice_recording_git("/", lambda: self.git(self.repo, "merge", "-q", "--ff-only", "pick"))
+
+        self.assertIsNotNone(answer, "the server never answered")
+        first, second, _ = answer
+        self.assertEqual(self.completion(first), "0%")
+        self.assertEqual(self.completion(second), "100%")
+
+    def test_runs_no_git_for_it_on_the_next_refresh_of_the_project_page_or_the_attention_feed__when_its_branch_was_verified_gone(self):
+        """061-D9 — `/p/sample` and `/attention.json`, each asked for twice, name no branch on the second ask once it was verified gone — the project page and the attention feed, refreshed as often as the index, would keep asking git."""
+        for path in ("/p/sample", "/attention.json"):
+            with self.subTest(path=path):
+                self.setUp()
+                self.given_trusted_repo()
+                self.given_finished_session_without_worktree()
+                self.git(self.repo, "branch", "-D", BRANCH)
+
+                answer = self.serve_twice_recording_git(path, lambda: None)
+
+                self.assertIsNotNone(answer, "the server never answered")
+                self.assertEqual(self.names_branch(answer[2]), [])
+
+    def test_checks_the_record_again__when_a_trusted_repository_could_not_answer_the_refresh_that_verified_it(self):
+        """061-D10 — a direct build whose record names a commit on main, its branch gone from its own repository, verified while another trusted repository holding the branch could not answer, reads with the Lead once that repository answers — one failed git call would land the record without the branch's change ever being compared."""
+        self.given_trusted_repo()
+        self.given_change_description()
+        self.git(self.repo, "branch", "-D", BRANCH)
+        self.given_record(self.rev("rev-parse", "main"))
+        second = self.given_second_trusted_repo_holding_the_branch()
+        head = second / ".git" / "HEAD"
+        good = head.read_text()
+        head.write_text("not a ref\n")
+
+        answer = self.serve_twice_recording_git("/", lambda: head.write_text(good))
+
+        self.assertIsNotNone(answer, "the server never answered")
+        first, second_body, _ = answer
+        self.assertEqual(self.completion(first), "100%")
+        self.assertEqual(self.completion(second_body), "0%")
+
 if __name__ == "__main__":
     unittest.main()

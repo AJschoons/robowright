@@ -86,3 +86,34 @@ session; project `sample` planning `| U9 | \`export-csv\` | Exports notes as CSV
 
 Red before the code: N1 (`'3/5' != 'U9 (export-csv) · 3/5'`). A dir in the `<project>-NNN-<rest>` form would match
 through the name rules already, so the row uses a bare slug.
+
+## 061 · the sessions of an archived project leave the roster
+
+A direct build. A session filed under an archived project (`is_archived` on `<projects root>/<project>/robowright.json`,
+read once per project per run through `owner_git.read_unlinked`) whose `phase` is `done` or `parked` is skipped before
+`describe()` runs, unless `--all` or `--only` names it. A live session of an archived project is described as
+before, with `archived project` among its flags. The project a session is filed under is a non-empty
+`run.json.project`, else the directory name's group (`filed_project`, which `plan_label` and the loop both use).
+
+Fixture: project `sample` under a scratch projects root (`$ROBOWRIGHT_PROJECTS_ROOT`) with a `PROJECT.md` and
+`robowright.json` `{"archived": true}`; sessions under a scratch sessions root, each last written an hour ago, inside
+the 48 h window; no live session, a scratch `$HOME`.
+
+| # | Area | Given | When | Then | Source | Test |
+|---|---|---|---|---|---|---|
+| 061-B1 | done | `sample-001-first` done | the roster | its name is nowhere in the output | briefing B1: "whose `phase` is `done` or `parked` is skipped" | `test_roster__leaves_out_a_done_session__when_its_project_is_archived` |
+| 061-B2 | parked | `sample-001-first` parked | the roster | its name is nowhere in the output, no `parked:` line either | as B1 | `test_roster__leaves_out_a_parked_session__when_its_project_is_archived` |
+| 061-B3 | `--all` | as B1 | the roster `--all` | a table row names it | briefing B1: "unless `--all` … names it" | `test_roster__lists_a_done_session_of_an_archived_project__with_all` |
+| 061-B4 | `--only` | as B1 | the roster `--only sample-001-first` | a table row names it | briefing B1: "unless … `--only` names it" | `test_roster__lists_a_done_session_of_an_archived_project__when_only_names_it` |
+| 061-B5 | live | `sample-001-first` implementing | the roster `--json` | its row's flags hold `archived project` | briefing B1: "A live session of an archived project is described as today, with `archived project` appended to its `flags`" | `test_roster__flags_a_live_session__when_its_project_is_archived` |
+| 061-B6 | not the JSON `true` | as B1; `archived` the string `"true"` | the roster | a table row names it | briefing A1: "the JSON value `true` and nothing else" | `test_roster__lists_a_done_session__when_archived_is_not_json_true` |
+| 061-B7 | refused read | as B1; `robowright.json` a symlink to a file outside holding `{"archived": true}` | the roster | a table row names it | briefing B2: "a refused or malformed read is "not archived"" | `test_roster__lists_a_done_session__when_robowright_json_is_a_link` |
+| 061-B8 | filed by `run.json.project` | `notes-001-first` done, `project` `sample` | the roster | its name is nowhere in the output | briefing B1: "`run.json.project`, else `GROUP_REGEX` on the directory name" | `test_roster__leaves_out_a_done_session__when_run_json_files_it_under_an_archived_project` |
+| 061-B9 | skipped before `describe()` | as B1; a FIFO at its `LEDGER.md` and `events.jsonl` | the roster, under a 20 s timeout | exit 0 within the timeout; its name nowhere in the output | briefing B1: "after `run.json` is read and before `describe()`" | `test_roster__reads_nothing_past_run_json__for_a_done_session_of_an_archived_project` |
+| 061-B10 | `--since` | as B1, `sample` not yet archived; a `--since` tick; then `sample` archived | two more ticks | the first prints `sample-001-first: no longer on the roster …` once; the second does not | briefing B1: "a session that disappears prints its existing "no longer on the roster" line once" | `test_roster__since_reports_a_session_gone_once__when_its_project_is_archived` |
+
+Red before the code: B1, B2, B5, B8, B9 and B10, each on its Then (B9 waited on the FIFO until the timeout; B10 printed
+`no change since last tick`). B3, B4, B6 and B7 were green at red: an unarchived session already shows.
+Kills, one mutation each: the skip removed (B1, B2, B8, B9, B10); `--all` not honoured (B3);
+`--only` not honoured (B4); no `archived project` flag (B5); any truthy `archived` (B6); robowright.json read with
+`open()`, links followed (B7); filed by the directory name only (B8); `parked` not settled (B2).
