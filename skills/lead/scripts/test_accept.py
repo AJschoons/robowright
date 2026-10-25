@@ -145,7 +145,7 @@ class AcceptCase(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(settings) + "\n")
 
-    def given_session(self, phase, worktree=None):
+    def given_session(self, phase, worktree=None, units=None):
         run = {
             "ticket": "sample-001-notes",
             "worktree": str(worktree or self.worktree),
@@ -154,7 +154,7 @@ class AcceptCase(unittest.TestCase):
             "rotate": None,
             "rebriefs": [],
             "stop_reason": None,
-            "units": [{"id": "U1", "status": "done", "head": self.git(self.worktree, "rev-parse", "HEAD"), "gate_attempts": 1}],
+            "units": units or [{"id": "U1", "status": "done", "head": self.git(self.worktree, "rev-parse", "HEAD"), "gate_attempts": 1}],
         }
         (self.dir / "run.json").write_text(json.dumps(run, indent=2) + "\n")
         done = subprocess.run([sys.executable, str(SESSION_STATE), str(self.dir), "adopt", "--by", "owner", "--reason", "fixture"],
@@ -270,6 +270,105 @@ class HappyPathTests(AcceptCase):
         self.assertIn(f"worktree remove {self.worktree}", self.out)
         self.assertTrue(self.worktree.is_dir())
         self.assertEqual(self.git(self.main, "rev-parse", BRANCH), self.tip)
+
+
+class TeardownTests(AcceptCase):
+    """TD1–TD5 · the teardown line's `branch -D` names every unit branch the integrated tip holds, and only those."""
+
+    def given_stack(self):
+        """U2 on `<BRANCH>-u2`, cut from U1's tip with one more commit, checked out in the worktree; returns its tip."""
+        u1 = self.git(self.worktree, "rev-parse", "HEAD")
+        self.git(self.worktree, "switch", "-q", "-c", f"{BRANCH}-u2")
+        self.commit(self.worktree, "sort.txt", "notes: sort the list by title")
+        u2 = self.git(self.worktree, "rev-parse", "HEAD")
+        self.given_session(phase="done", units=[
+            {"id": "U1", "status": "done", "branch": BRANCH, "head": u1, "gate_attempts": 1},
+            {"id": "U2", "status": "done", "branch": f"{BRANCH}-u2", "head": u2, "gate_attempts": 1},
+        ])
+        return u2
+
+    def deleted(self, out):
+        """The branches the printed teardown line's `branch -D` names."""
+        line = next(line for line in out.splitlines() if " branch -D " in line)
+        words = shlex.split(line.split("&&")[-1])
+        return words[words.index("-D") + 1:]
+
+    def accepted(self, tip):
+        code, out, err = self.accept(tip=tip)
+        self.assertEqual(code, 0, err)
+        return out
+
+    def test_accept__the_teardown_deletes_every_unit_branch_of_a_stack(self):
+        """TD1 a 2-unit stack's line deletes both unit branches — U1's was left behind after U18 and U15."""
+        out = self.accepted(self.given_stack())
+        self.assertEqual(sorted(self.deleted(out)), [BRANCH, f"{BRANCH}-u2"])
+
+    def test_accept__a_single_unit_teardown_deletes_its_one_branch(self):
+        """TD2 one unit's line deletes its one branch — the session's branch would outlive its accept."""
+        out = self.accepted(self.branch_tip())
+        self.assertEqual(self.deleted(out), [BRANCH])
+
+    def test_accept__a_unit_branch_holding_commits_the_tip_lacks_is_kept_and_named(self):
+        """TD3 a unit branch with a commit the tip lacks is left out of `branch -D` and named as kept — running the line would lose that commit."""
+        tip = self.given_stack()
+        self.git(self.main, "worktree", "add", "-q", str(self.root / "u1-wt"), BRANCH)
+        self.commit(self.root / "u1-wt", "late.txt", "notes: a fix made on U1 after U2 was cut")
+        self.git(self.main, "worktree", "remove", str(self.root / "u1-wt"))
+        out = self.accepted(tip)
+        self.assertEqual(self.deleted(out), [f"{BRANCH}-u2"])
+        self.assertIn(f"kept: {BRANCH} ", out)
+
+    def test_accept__a_branch_that_only_shares_the_sessions_prefix_is_not_deleted(self):
+        """TD4 `<BRANCH>-u2x` and `<BRANCH>-review` stay out of `branch -D` — another session's branch would be deleted."""
+        tip = self.given_stack()
+        self.git(self.main, "branch", f"{BRANCH}-u2x", tip)
+        self.git(self.main, "branch", f"{BRANCH}-review", tip)
+        out = self.accepted(tip)
+        self.assertEqual(sorted(self.deleted(out)), [BRANCH, f"{BRANCH}-u2"])
+
+    def test_accept__a_worktree_off_the_sessions_branches_deletes_only_its_own(self):
+        """TD5 a worktree on `notes-by-hand` deletes that branch alone — `robowright/<slug>` is not the branch this session claims."""
+        self.git(self.worktree, "switch", "-q", "-c", "notes-by-hand")
+        self.commit(self.worktree, "sort.txt", "notes: sort the list by title")
+        self.given_session(phase="done")
+        out = self.accepted(self.git(self.worktree, "rev-parse", "HEAD"))
+        self.assertEqual(self.deleted(out), ["notes-by-hand"])
+
+    def given_branch_moves_when_the_teardown_is_composed(self):
+        """The first `for-each-ref` accept.sh runs first moves BRANCH to a child of its tip: a commit a live session made
+        after the tip check."""
+        tip = self.branch_tip()
+        child = self.git(self.main, "commit-tree", f"{tip}^{{tree}}", "-p", tip, "-m", "notes: a commit after the tip check")
+        mark = self.root / "move-once"
+        mark.write_text("")
+        (self.root / "bin" / "git").write_text(RECORDING_GIT.replace(f"exec {REAL_GIT}", f"""case " $* " in
+  *" for-each-ref "*) if [ -f {shlex.quote(str(mark))} ]; then
+    rm -f {shlex.quote(str(mark))}
+    {REAL_GIT} -C {shlex.quote(str(self.main))} update-ref refs/heads/{BRANCH} {child}
+  fi ;;
+esac
+exec {REAL_GIT}"""))
+        return tip
+
+    def test_accept__a_branch_that_moves_past_the_tip_during_the_accept_is_kept_and_the_line_still_prints(self):
+        """TD6 a branch moved past the tip once the tip was checked is kept, and the line removes only the worktree — accept.sh exited 1 under bash 3.2 after main had moved, printing a bare `branch -D`."""
+        tip = self.given_branch_moves_when_the_teardown_is_composed()
+        code, out, err = self.accept(tip=tip)
+        self.assertEqual(code, 0, err)
+        self.assertNotIn("branch -D", out)
+        self.assertIn(f"worktree remove {self.worktree}\n", out)
+        self.assertIn(f"kept: {BRANCH} ", out)
+
+    def test_accept__a_branch_run_json_names_outside_the_sessions_own_is_not_deleted(self):
+        """TD7 a unit `run.json` lists on `robowright/sample-002-other` stays out of `branch -D` — a session could have the Owner delete any branch by writing its name."""
+        tip = self.branch_tip()
+        self.git(self.main, "branch", "robowright/sample-002-other", tip)
+        self.given_session(phase="done", units=[
+            {"id": "U1", "status": "done", "branch": BRANCH, "head": tip, "gate_attempts": 1},
+            {"id": "U2", "status": "done", "branch": "robowright/sample-002-other", "head": tip, "gate_attempts": 1},
+        ])
+        out = self.accepted(tip)
+        self.assertEqual(self.deleted(out), [BRANCH])
 
 
 class RefusalTests(AcceptCase):

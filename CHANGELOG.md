@@ -23,3 +23,7 @@ Landed 2026-10-23: every `rw-git switch` form passes `--no-overwrite-ignore`, so
 ignored file the target tracks exits 1 instead; and on an install whose `launch.json` sets `unit.ticket_regex`, work
 with no tracker key is briefed and launched, its unit id the session directory's name, and built directly from a
 plain `--slug`.
+
+Landed 2026-10-24: `accept.sh`'s teardown line deletes every unit branch of a stacked session, `robowright/<slug>`
+and each `robowright/<slug>-u<N>` the integrated tip holds, where it named only the top unit's; a unit branch holding a
+commit the tip lacks is printed as `kept` instead.

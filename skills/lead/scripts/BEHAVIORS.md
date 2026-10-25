@@ -117,3 +117,40 @@ Red before the code: B1, B2, B5, B8, B9 and B10, each on its Then (B9 waited on 
 Kills, one mutation each: the skip removed (B1, B2, B8, B9, B10); `--all` not honoured (B3);
 `--only` not honoured (B4); no `archived project` flag (B5); any truthy `archived` (B6); robowright.json read with
 `open()`, links followed (B7); filed by the directory name only (B8); `parked` not settled (B2).
+
+## accept.sh · the teardown line deletes every unit branch
+
+    python3 skills/lead/scripts/test_accept.py TeardownTests
+
+A stacked session's units each have a branch: `robowright/<slug>` for U1 and `robowright/<slug>-u<N>` for unit N
+(the project hook's Naming), and the worktree ends on the top unit's. The teardown line named only the worktree's
+branch, so `robowright-site-018-reel-review-feedback` and `robowright-site-015-reel-cuts` kept their U1 branches
+after the Owner ran it. `<slug>` is the session folder's name, and the branches are read from the main clone, not
+from `run.json`, which a session writes.
+
+Fixture: the suite's session, its worktree on `robowright/sample-001-notes`. For a stack,
+`robowright/sample-001-notes-u2` cut from that tip with one more commit, checked out in the worktree, and `run.json`
+listing U1 and U2 with their branches.
+
+| # | Given | When | Then | Source | Test |
+|---|---|---|---|---|---|
+| TD1 | a 2-unit stack | accept | `branch -D` names `robowright/<slug>` and `robowright/<slug>-u2` | Owner, 2026-10-24: "delete every branch the session's units used" (U18, U15) | `test_accept__the_teardown_deletes_every_unit_branch_of_a_stack` |
+| TD2 | one unit | accept | `branch -D` names `robowright/<slug>` alone | the line before this change | `test_accept__a_single_unit_teardown_deletes_its_one_branch` |
+| TD3 | the stack, then a commit on `robowright/<slug>` that the tip lacks | accept | `branch -D` names `-u2` alone; a `kept:` line names `robowright/<slug>` | Assumed: `-D` on a branch holding commits main lacks loses them, and the Owner runs the line as printed | `test_accept__a_unit_branch_holding_commits_the_tip_lacks_is_kept_and_named` |
+| TD4 | the stack, and `robowright/<slug>-u2x` and `robowright/<slug>-review` at its tip | accept | neither is in `branch -D` | `rw_git.py` `is_own`: a session owns only `robowright/<slug>` and `-u<N>` | `test_accept__a_branch_that_only_shares_the_sessions_prefix_is_not_deleted` |
+| TD5 | the worktree on `notes-by-hand`, `robowright/<slug>` behind it | accept | `branch -D` names `notes-by-hand` alone | the line before this change: the worktree's own branch, never one the session does not claim | `test_accept__a_worktree_off_the_sessions_branches_deletes_only_its_own` |
+| TD6 | one unit; its branch gains a commit after the tip check, before the teardown is composed | accept | exit 0; the line removes the worktree and deletes no branch; a `kept:` line names `robowright/<slug>` | end-of-stack review F1: under bash 3.2 the empty `branch -D` list exited 1 after main had moved; TD3's rule for a branch holding a commit the tip lacks | `test_accept__a_branch_that_moves_past_the_tip_during_the_accept_is_kept_and_the_line_still_prints` |
+| TD7 | one unit; `run.json` also lists a unit on `robowright/sample-002-other`, a branch at the tip | accept | `branch -D` names `robowright/<slug>` alone | end-of-stack review F3; `run.json` is session-written (repo `CLAUDE.md`, Trust model) | `test_accept__a_branch_run_json_names_outside_the_sessions_own_is_not_deleted` |
+
+Red before the code: TD1 on its Then (`['robowright/sample-001-notes-u2'] != ['robowright/sample-001-notes',
+'robowright/sample-001-notes-u2']`, the U18 line), TD3 (no `kept:` line), and TD4, though only for TD1's reason. TD2
+and TD5 were green at red: the line already named a single unit's branch and the worktree's own.
+Kills, predicted before each run, all matched, run 2026-10-24: `robowright/<slug>` itself not taken (TD1, TD3, TD4);
+the first branch dropped from the printed line (TD1–TD5); no ancestor check (TD3); any branch under the prefix taken,
+with and without the `for-each-ref` pattern widened to `<slug>-*` (TD4); no fallback to the worktree's branch (TD5).
+A first try at the first kill, `[[ false || … ]]`, killed only TD4: inside `[[ ]]`, `false` is a non-empty string.
+
+TD6 and TD7 came from the end-of-stack review (2026-10-25). TD6 was red on the defect: `teardown_branches[@]: unbound
+variable`, exit 1. TD7 was green at red. Every mutation was re-run with both added, all predictions matched: the ones
+above now also redden TD6 (`robowright/<slug>` not taken, no ancestor check) and TD7 (first branch dropped); the
+`branch -D` list printed unguarded again (TD6); `run.json` `units[].branch` outside the prefix added to the line (TD7).

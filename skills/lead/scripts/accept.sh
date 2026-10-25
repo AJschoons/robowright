@@ -42,7 +42,8 @@
 #   message-git-default  the first line is git's `Squashed commit of the following:`
 # Session-written text is printed with its control bytes removed. After the fast-forward,
 # run.json.accepted is written through session-state.py's `accept` event, the tree-identical check is
-# printed, and so is the teardown line, which this script never runs.
+# printed, and so is the teardown line, which this script never runs. Its `branch -D` names every unit branch of the
+# session that the tip holds; a unit branch holding a commit the tip lacks is printed as kept instead.
 
 set -uo pipefail
 
@@ -193,6 +194,33 @@ hardened_git() {
         fi
     done < <(python3 "$OWNER_GIT" flags "$1")
     (( ${#GIT[@]} > 1 )) && $is_env || die "owner_git.py printed no git options: nothing was run"
+}
+
+# Into $teardown_branches, the session's unit branches in the main clone $1 that the tip $3 holds: robowright/<slug> and
+# robowright/<slug>-u<N>, as rw-git owns them, <slug> the session folder's name; into $kept_branches, those it does not.
+# Only the worktree's branch $2 when <slug> is out of shape or $2 is not one of them.
+collect_unit_branches() {
+    local main_clone=$1 head=$2 tip=$3 slug own ref name number is_head_own=false
+    teardown_branches=() kept_branches=()
+    slug=$(basename "$(real_path "$session_dir")")
+    own="robowright/$slug"
+    if [[ "$slug" =~ $SLUG_FORM && "$slug" != *.lock ]]; then
+        while IFS= read -r ref; do
+            name=${ref#refs/heads/}
+            number=${name#"$own-u"}
+            [[ "$name" == "$own" || ( "$number" != "$name" && "$number" =~ ^[1-9][0-9]*$ ) ]] || continue
+            [[ "$name" == "$head" ]] && is_head_own=true
+            if "${GIT[@]}" -C "$main_clone" merge-base --is-ancestor --end-of-options "$ref" "$tip" 2>/dev/null; then
+                teardown_branches+=("$name")
+            else
+                kept_branches+=("$name")
+            fi
+        done < <("${GIT[@]}" -C "$main_clone" for-each-ref --sort=version:refname --format='%(refname)' \
+            "refs/heads/$own" "refs/heads/$own-u*")
+    fi
+    if ! $is_head_own; then
+        teardown_branches=("$head") kept_branches=()
+    fi
 }
 
 # Preflight for --direct, each refused by name with exit 2 before anything is written, after tip-missing, tip-invalid,
@@ -400,5 +428,14 @@ else
     exit 1
 fi
 
+collect_unit_branches "$main_clone" "$branch" "$tip"
 echo "teardown is the Owner's; accept.sh never runs it:"
-printf '  git -C %q worktree remove %q && git -C %q branch -D %q\n' "$main_clone" "$worktree" "$main_clone" "$branch"
+printf '  git -C %q worktree remove %q' "$main_clone" "$worktree"
+if (( ${#teardown_branches[@]} > 0 )); then
+    printf ' && git -C %q branch -D' "$main_clone"
+    printf ' %q' "${teardown_branches[@]}"
+fi
+printf '\n'
+for kept in ${kept_branches[@]+"${kept_branches[@]}"}; do
+    echo "kept: $kept holds a commit $branch at $tip lacks: read it before you delete it" | show
+done
