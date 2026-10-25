@@ -27,3 +27,8 @@ plain `--slug`.
 Landed 2026-10-24: `accept.sh`'s teardown line deletes every unit branch of a stacked session, `robowright/<slug>`
 and each `robowright/<slug>-u<N>` the integrated tip holds, where it named only the top unit's; a unit branch holding a
 commit the tip lacks is printed as `kept` instead.
+
+Landed 2026-10-25: `robowright-resolve.py` reads a project folder through its `robowright.json` `repos` when the
+folder sits inside another repository's checkout, such as a projects root kept in git, instead of resolving the
+enclosing checkout and refusing for want of a hook for its origin; a checkout's own root still resolves as that
+checkout.

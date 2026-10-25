@@ -6,8 +6,10 @@ A role reads the machine profile, then the repository's project hook, then one p
 per client the hook's section 1 lists, each base plugin ahead of the plugin that names it. The
 path is a checkout (its git toplevel is the one repo) or a project folder, whose robowright.json
 `repos` lists every repo as {name, path, origin}, `origin` null or absent for a checkout with its
-own hook. For a project folder the profile is printed once, then each repo's hook and plugins in
-list order; a path already printed is not repeated. The hook is the repo's own
+own hook. A folder holding a robowright.json is a project folder unless it is a checkout's root,
+however the path spells it, even inside another repository's checkout. For a project folder the
+profile is printed once, then each repo's hook and plugins in list order; a path already printed
+is not repeated. The hook is the repo's own
 .claude/robowright/project.md, else the one machine-local hook whose origin-match token matches
 `git remote get-url origin`, so an entry whose checkout has no hook of its own needs `origin`. A
 plugin, and a plugin's base, is the machine's private ~/.claude/robowright/plugins/<platform>.md
@@ -113,9 +115,11 @@ def resolve_repos(path):
     if not os.path.exists(path):
         fail(EXIT_USAGE, f"{path} does not exist")
     toplevel = git("-C", path, "rev-parse", "--show-toplevel")
-    if toplevel:
-        return [toplevel]
     settings_path = os.path.join(path, PROJECT_SETTINGS)
+    # A project folder can sit inside another repository's checkout, as under a projects root kept in git.
+    is_checkout_root = bool(toplevel) and os.path.samefile(toplevel, path)
+    if toplevel and (is_checkout_root or not os.path.isfile(settings_path)):
+        return [toplevel]
     if not os.path.isfile(settings_path):
         print(f"robowright-resolve: {path} is neither a git checkout nor a project folder with {PROJECT_SETTINGS}",
               file=sys.stderr)

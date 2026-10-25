@@ -43,6 +43,8 @@ ALPHA_EXTRA_ORIGIN = "git@example.com:example-org/alpha-extra.git"
 GAMMA_ORIGIN = "git@example.com-alt:example-org/gamma.git"
 ALPHA_EXTRA_ORIGIN_ROW = "| Origin | `git@example.com:example-org/alpha-extra.git` — match on `example-org/alpha-extra` |"
 SHOP_ORIGIN = "git@github.com:example/shop.git"
+# A projects root kept in git: its origin matches no hook (dev-projects on the maintainer's Macs).
+PROJECTS_ORIGIN = "git@github.com:example/projects.git"
 APP_ENTRY = {"name": "app", "path": "~/Dev/app", "origin": APP_ORIGIN}
 IOS_CLIENT = "- **iOS** — `platform: ios`"
 ANDROID_CLIENT = "- **Android** — `platform: android`"
@@ -185,17 +187,16 @@ class RobowrightResolve(unittest.TestCase):
         folder = self.given_project_folder({"repos": [{"name": "app", "path": "~/Dev/app", "origin": APP_ORIGIN}]})
         self.assert_chain(self.resolve(folder), self.profile, hook, ios)
 
-    def test_treats_a_robowright_json_inside_a_checkout_as_the_checkout(self):
-        """/// B4 a path inside a git checkout resolves as that checkout even beside a robowright.json — the chain silently switches repos"""
+    def test_treats_a_robowright_json_at_a_checkouts_root_as_the_checkout(self):
+        """/// B4 a checkout's own root resolves as that checkout even beside a robowright.json — a Worker's chain silently switches to a project's repos"""
         repo = self.given_repo()
         hook = self.given_in_repo_hook(repo, self.hook_text(*TABLE_HEAD, APP_ORIGIN_ROW, "",
                                                             "**Clients**", "", "- **iOS** — `platform: ios`"))
         other = self.given_repo("other", origin="git@github.com:example/other.git")
         self.given_in_repo_hook(other, self.hook_text(*NO_CLIENTS))
-        (repo / "sub").mkdir()
-        (repo / "sub/robowright.json").write_text(json.dumps({"repo": "~/Dev/other"}))
+        (repo / "robowright.json").write_text(json.dumps({"repos": [{"name": "other", "path": "~/Dev/other", "origin": None}]}))
         ios = self.given_plugin("ios")
-        self.assert_chain(self.resolve(repo / "sub"), self.profile, hook, ios)
+        self.assert_chain(self.resolve(repo), self.profile, hook, ios)
 
     def test_refuses_naming_repos_and_the_template__when_robowright_json_has_neither_repos_nor_repo(self):
         """/// B5 a robowright.json with neither `repos` nor `repo` is exit 4 naming the file, `repos` and ROBOWRIGHT-TEMPLATE.json — a config written before `repos` existed is refused without saying what to write (assumed Q2, Q3)"""
@@ -1470,6 +1471,55 @@ class RobowrightResolve(unittest.TestCase):
         hook = self.given_machine_local_hook("app", self.hook_text(*TABLE_HEAD, APP_ORIGIN_ROW, "", *NO_CLIENTS))
 
         self.assert_chain(self.resolve(repo), self.profile, hook)
+
+
+    # a project folder inside another repository's checkout: a projects root kept in git
+
+    def given_projects_root_checkout(self):
+        """~/Dev/projects as a checkout of its own, with an origin no hook matches."""
+        return self.given_repo("projects", origin=PROJECTS_ORIGIN)
+
+    def given_nested_project_folder(self, projects, settings):
+        folder = projects / "site"
+        folder.mkdir()
+        (folder / "robowright.json").write_text(json.dumps(settings))
+        return folder
+
+    def test_prints_the_repos_chain__for_a_project_folder_inside_a_projects_root_checkout(self):
+        """/// B121 a project folder below another checkout's root prints its `repos` chain, not the enclosing checkout's — the Planner, Lead and Explainer refuse at start: no hook for the projects root's origin"""
+        projects = self.given_projects_root_checkout()
+        hook = self.given_checkout("app", APP_ORIGIN, IOS_CLIENT)
+        ios = self.given_plugin("ios")
+        folder = self.given_nested_project_folder(projects, {"repos": [APP_ENTRY]})
+        self.assert_chain(self.resolve(folder), self.profile, hook, ios)
+
+    def test_refuses_naming_repos__when_a_project_folder_inside_a_checkout_with_a_hook_has_no_repos(self):
+        """/// B122 a nested project folder whose robowright.json has no `repos` is refused naming `repos`, even when the enclosing checkout has a hook — a broken project silently reads the enclosing repo's chain"""
+        projects = self.given_projects_root_checkout()
+        self.given_in_repo_hook(projects, self.hook_text(*NO_CLIENTS))
+        folder = self.given_nested_project_folder(projects, {"project": "site"})
+        self.assert_refused(self.resolve(folder), EXIT_MISSING, "`repos`", folder / "robowright.json")
+
+    def test_treats_a_checkouts_root_reached_through_a_link_as_the_checkout__beside_a_robowright_json(self):
+        """/// B123 a checkout's root named through a symlink still resolves as that checkout beside a robowright.json — the link's spelling, not the folder, decides project-folder mode"""
+        repo = self.given_repo()
+        hook = self.given_in_repo_hook(repo, self.hook_text(*TABLE_HEAD, APP_ORIGIN_ROW, "", *NO_CLIENTS))
+        self.given_checkout("other", "git@github.com:example/other.git")
+        (repo / "robowright.json").write_text(json.dumps({"repos": [{"name": "other", "path": "~/Dev/other", "origin": None}]}))
+        link = self.root / "app-link"
+        link.symlink_to(repo)
+        self.assert_chain(self.resolve(link), self.profile, hook)
+
+    def test_treats_a_checkouts_root_named_in_another_case_as_the_checkout__beside_a_robowright_json(self):
+        """/// B124 a checkout's root named in another letter case on a case-insensitive volume still resolves as that checkout beside a robowright.json — git's spelling and the argument's differ, and the chain silently switches to the project's repos"""
+        repo = self.given_repo("App")
+        hook = self.given_in_repo_hook(repo, self.hook_text(*TABLE_HEAD, APP_ORIGIN_ROW, "", *NO_CLIENTS))
+        self.given_checkout("other", "git@github.com:example/other.git")
+        (repo / "robowright.json").write_text(json.dumps({"repos": [{"name": "other", "path": "~/Dev/other", "origin": None}]}))
+        miscased = repo.parent / "app"
+        if not miscased.exists():
+            self.skipTest("the scratch volume is case-sensitive")
+        self.assert_chain(self.resolve(miscased), self.profile, hook)
 
 
 if __name__ == "__main__":

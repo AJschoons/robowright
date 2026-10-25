@@ -96,6 +96,10 @@ plugins before the plugins that name them, a path already printed not repeated.
 | Planner, Lead, Explainer | The project folder (`../planner/SKILL.md:47`, `../lead/SKILL.md:36`, `../explainer/SKILL.md:120`) | Every entry of `robowright.json.repos` — `{name, path, origin}`, `origin` checked against the checkout's remote, and optional for a checkout with its own hook — in list order |
 | Worker | Its worktree (`../worker/SKILL.md:223`) | That checkout alone; it never reads `robowright.json`. Of the plugins printed it reads only the one its brief's `client` names, plus that plugin's `base:`; client `none` reads none |
 
+A folder holding a `robowright.json` is a project folder even when it sits inside another
+repository's checkout, as under a projects root kept in git; a checkout's own root always
+resolves as that checkout, and a folder inside a checkout without one as the enclosing checkout.
+
 Exit 4 is the refusal — no profile, no hook, no plugin, or a `robowright.json.repos` the resolver
 cannot validate — and every role quotes the resolver's message rather than guessing a default.
 
