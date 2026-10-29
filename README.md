@@ -21,7 +21,7 @@ A blueprint, left to right. The Owner, a person in a hard hat with a light bulb 
 
 To run a project, start from [`MANUAL.md`](MANUAL.md); anything it does not cover is asked with `/robowright help <your question>`.
 
-Robowright turns Claude Code into a small crew. You agree a plan with one session, and the
+Robowright turns Claude Code into a small crew. You thoroughly plan with one session, and the
 rest runs without you: each change is built in its own git worktree, gated by a reviewer that
 never saw it being written, and published however your project hook says. Accepting it stays yours.
 Every hand-off is a file on disk, so any session can die and a fresh one picks up where it
