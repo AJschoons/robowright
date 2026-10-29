@@ -45,10 +45,9 @@ git worktree add -b robowright/<slug> "$(git rev-parse --show-toplevel)/.worktre
 
 - Branch `robowright/<slug>`, `<slug>` matching the session directory's; unit N of a stack is
   `robowright/<slug>-u<N>`.
-- A worktree made before U46 at `.claude/worktrees/<slug>` keeps working, for the launcher and
-  rw-git alike, until it is torn down; a new one is made there only for a session whose
-  `run.json` already names that place. A `**/.claude` deny in a machine's settings makes its files
-  unwritable to a session.
+- `.claude/worktrees/<name>` is the desktop app's: the launcher never makes a worktree there, and
+  rw-git serves one there as an unmanaged checkout. A `**/.claude` deny in a machine's settings
+  makes its files unwritable to a session started in it.
 - **Never run `install.sh` from a worktree against the real `$HOME`.** An install check runs on
   a scratch `HOME` only (→ 6).
 - Teardown: removing the worktree and deleting the branch are Owner-only; hand the Owner the

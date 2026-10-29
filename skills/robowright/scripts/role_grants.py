@@ -72,9 +72,8 @@ COMMITS = ("rw-git *",)
 PROJECT_CONFIGS = (".claude", ".mcp.json")
 HOME = "the home directory"
 # The project hook's Worktree and Naming conventions: <repo>/.worktrees/<slug> on robowright/<slug>, the slug being the
-# session folder's name. A session briefed before U46 names the old place, which keeps working until it is torn down.
+# session folder's name.
 WORKTREES = "/.worktrees/"
-LEGACY_WORKTREES = "/.claude/worktrees/"
 # The main checkout's exclude line for the folder worktrees are made in, so its status stays clean for accept.sh.
 EXCLUDED = "/.worktrees/"
 BRANCH_PREFIX = "robowright/"
@@ -683,10 +682,10 @@ def attributes_off(repo: str) -> list:
 
 
 def convention_repo(worktree, slug: str, what: str) -> str:
-    """The repository owner_git trusts whose <repo>/.worktrees/<slug>, or the old <repo>/.claude/worktrees/<slug>,
-    `worktree` is, spelled exactly so; else Refused naming `what`."""
+    """The repository owner_git trusts whose <repo>/.worktrees/<slug> `worktree` is, spelled exactly so; else Refused
+    naming `what`."""
     trusted = owner_git.configured_repos()
-    places = {f"{repo}{folder}{slug}": repo for repo in trusted for folder in (WORKTREES, LEGACY_WORKTREES)}
+    places = {f"{repo}{WORKTREES}{slug}": repo for repo in trusted}
     if worktree not in places:
         raise Refused(f"{what} {owner_git.shown(json.dumps(worktree))} is not where the launcher makes one: "
                       f"<repo>{WORKTREES}{slug} in a repository `repos` in {owner_git.launch_json()} lists and a project's "
@@ -853,14 +852,13 @@ def direct_briefing(config: dict, project: str, briefing: str) -> str:
 
 def direct_worktree(project: str, repo: str, slug: str, base: str, briefing: str) -> tuple:
     """(repository, worktree, the `worktree add` arguments and line, or None when the worktree is already the
-    repository's worktree of robowright/<slug> at <repo>/.worktrees/<slug>, or at the old <repo>/.claude/worktrees/<slug>
-    when nothing is at the new place), for a direct build, which has no run.json: every argv value held to the Worker's
-    checks before git runs."""
+    repository's worktree of robowright/<slug> at <repo>/.worktrees/<slug>), for a direct build, which has no run.json:
+    every argv value held to the Worker's checks before git runs."""
     direct_briefing(launch_config(), project, briefing)
     if not SEGMENT.fullmatch(slug):
         raise Refused(f"--slug {owner_git.shown(json.dumps(slug))} is not one path segment of letters, digits, '.', '_' and '-'")
     unlinked("--repo repository", repo)
-    worktree = direct_place(repo, slug)
+    worktree = f"{repo}{WORKTREES}{slug}"
     repo = convention_repo(worktree, slug, "--repo")
     unlinked("worktree", worktree)
     branch = BRANCH_PREFIX + slug
@@ -878,12 +876,6 @@ def direct_worktree(project: str, repo: str, slug: str, base: str, briefing: str
         raise Refused(f"the branch {branch} exists in {repo} but no worktree is at {worktree}; nothing is made over it. "
                       f"Read it, then delete it (git -C {repo} branch -D {branch}) or make its worktree by hand")
     return (repo, worktree, new_branch_command(repo, branch, worktree, base, "--base")[1:])
-
-
-def direct_place(repo: str, slug: str) -> str:
-    """<repo>/.worktrees/<slug>, unless nothing is there and a build started before U46 is at the old place."""
-    worktree, legacy = f"{repo}{WORKTREES}{slug}", f"{repo}{LEGACY_WORKTREES}{slug}"
-    return legacy if not os.path.lexists(worktree) and os.path.lexists(legacy) else worktree
 
 
 def direct(args: list) -> str:

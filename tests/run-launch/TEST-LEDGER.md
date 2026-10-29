@@ -495,3 +495,15 @@ than a string passed the refusal; the unfixed filter is their mutation.
 | # | Mutation | Predicted to fail | Observed | Verdict |
 |---|---|---|---|---|
 | M8 | the refusal reads `project` with `.project // empty`, any non-null value as set | TL-3 (`7`, `["sample"]`) | same | KILLED |
+
+## rw-git-old-place-001-retire · the launcher never makes the old place (WT-10, WT-16, DL-7)
+
+WT-10 and DL-7 were red before the code: a `run.json` naming a missing worktree at `<repo>/.claude/worktrees/<slug>`
+was made there, and a direct build fell back to its worktree there. WT-16 is a declared guard: the existing-worktree
+admission is unchanged, so it was green before and after. It catches that admission narrowed to `.worktrees/` only.
+
+| # | Mutation | Predicted to fail | Observed | Verdict |
+|---|---|---|---|---|
+| OLD-1 | `convention_repo` takes `<repo>/.claude/worktrees/<slug>` again | WT-10 | same | KILLED |
+| OLD-2 | `direct_worktree` takes the old place when nothing is at the convention path | DL-7 | same | KILLED; run with OLD-1, kill sets disjoint |
+| OLD-3 | the existing-worktree shape check admits `*/.worktrees/*` only | WT-16 and every row on the `<root>/worktrees/wt` fixture | WT-16 and 69 others | KILLED |

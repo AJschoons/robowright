@@ -44,6 +44,8 @@ SLUG = "sample-001-x"
 BRANCH = f"robowright/{SLUG}"
 OTHER_SLUG = "sample-002-y"
 OTHER_BRANCH = f"robowright/{OTHER_SLUG}"
+# A person's own branch: protected by no default pattern, outside robowright/.
+PERSON_BRANCH = "topic/sample"
 NAME, EMAIL = "Sample Builder", "builder@example.invalid"
 RUNNER = """import os, sys
 sys.path.insert(0, sys.argv[1])
@@ -335,18 +337,14 @@ class WhereItRunsTests(RwGitCase):
         self.assertIn("a git directory other than its own entry", err)
         self.assertNotIn("`desktop_roots`", err)
 
-    def test_commit__a_worktree_at_the_old_place_keeps_working(self):
-        """W8 · <repo>/.claude/worktrees/<slug> on robowright/<slug>: add and commit, exit 0, one commit on the branch."""
-        legacy = self.given_worktree(self.repo, f".claude/worktrees/{OTHER_SLUG}", OTHER_BRANCH)
-        message = self.given_message(folder=self.given_session(OTHER_SLUG))
-        before = self.head(legacy)
-        (legacy / "f").write_text("x\n")
+    def test_where__a_worktree_at_the_old_place_is_an_unmanaged_checkout(self):
+        """W8 · <repo>/.claude/worktrees/<slug> on robowright/<slug>: `where` there prints kind unmanaged — the old
+        place is the desktop app's, and only <repo>/.worktrees/<slug> is managed."""
+        old_place = self.given_worktree(self.repo, f".claude/worktrees/{OTHER_SLUG}", OTHER_BRANCH)
 
-        self.ok("add", "f", cwd=legacy)
-        self.ok("commit", "--message-file", str(message), cwd=legacy)
+        out = self.ok("where", cwd=old_place)
 
-        self.assertEqual(self.git(legacy, "rev-parse", "HEAD~1"), before)
-        self.assertEqual(self.branch(legacy), OTHER_BRANCH)
+        self.assertIn("kind: unmanaged", out.splitlines())
 
 
 class EnvironmentTests(RwGitCase):
@@ -1546,6 +1544,40 @@ class UnmanagedTests(RwGitCase):
         self.ok("add", "f", cwd=repo)
         self.ok("commit", "--message-file", str(self.given_note()), cwd=repo)
         self.assertEqual(self.marked(), [])
+
+    def test_commit__a_worktree_at_the_old_place_commits_on_an_unprotected_branch(self):
+        """U27 · <repo>/.claude/worktrees/<slug> on topic/sample, a message from the temp folder: add and commit exit 0,
+        HEAD~1 the head before, still on topic/sample — the desktop app's worktree is served as an unmanaged checkout."""
+        old_place = self.given_worktree(self.repo, f".claude/worktrees/{OTHER_SLUG}", PERSON_BRANCH)
+        message = self.given_note(self.root / "temp" / "old-place")
+        before = self.head(old_place)
+        (old_place / "f").write_text("x\n")
+
+        self.ok("add", "f", cwd=old_place)
+        self.ok("commit", "--message-file", str(message), cwd=old_place)
+
+        self.assertEqual(self.git(old_place, "rev-parse", "HEAD~1"), before)
+        self.assertEqual(self.branch(old_place), PERSON_BRANCH)
+
+    def test_commit__a_worktree_at_the_old_place_is_held_to_the_unmanaged_rules(self):
+        """U28 · at <repo>/.claude/worktrees: on topic/sample, a message under <sessions_root>/<its name>/ is
+        message-file; on main, a message from the temp folder is branch-protected; no commit either way — the old
+        place gets neither a session's message rule nor a session's branch."""
+        on_own_branch = self.given_worktree(self.repo, f".claude/worktrees/{OTHER_SLUG}", PERSON_BRANCH)
+        on_main = self.repo / ".claude" / "worktrees" / "sample-003-z"
+        self.git(self.repo, "worktree", "add", "-q", str(on_main), "main")
+        from_session_folder = self.given_message(folder=self.given_session(OTHER_SLUG))
+        from_temp_folder = self.given_note(self.root / "temp" / "old-place")
+        for where, message, code_name in ((on_own_branch, from_session_folder, "message-file"),
+                                          (on_main, from_temp_folder, "branch-protected")):
+            with self.subTest(refused=code_name):
+                (where / "f").write_text("x\n")
+                self.git(where, "add", "f")
+                before = self.head(where)
+
+                self.refused(code_name, "commit", "--message-file", str(message), cwd=where)
+
+                self.assertEqual(self.head(where), before)
 
 
 class DailyTests(RwGitCase):
@@ -2971,13 +3003,13 @@ class ExplicitWorktreeTests(RwGitCase):
         self.assertEqual(out.splitlines()[3:], ["kind: unmanaged", "head: main"])
         self.assertEqual(self.staged(self.repo), ["f"])
 
-    def test_where__a_worktree_at_the_old_place_is_managed(self):
-        """X12 · `--dir <repo>/.claude/worktrees/<slug> where`: kind managed <slug>, as W8."""
-        legacy = self.given_worktree(self.repo, f".claude/worktrees/{OTHER_SLUG}", OTHER_BRANCH)
+    def test_where__a_worktree_at_the_old_place_is_unmanaged(self):
+        """X12 · `--dir <repo>/.claude/worktrees/<slug> where`: kind unmanaged, as W8."""
+        old_place = self.given_worktree(self.repo, f".claude/worktrees/{OTHER_SLUG}", OTHER_BRANCH)
 
-        out = self.ok_at(legacy, "where")
+        out = self.ok_at(old_place, "where")
 
-        self.assertIn(f"kind: managed {OTHER_SLUG}", out.splitlines())
+        self.assertIn("kind: unmanaged", out.splitlines())
 
     def test_where__a_dir_through_a_link_prints_the_canonical_worktree(self):
         """X13 · `--dir <a link to the worktree> where`: served, the worktree's canonical path printed, never the

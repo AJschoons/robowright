@@ -538,3 +538,13 @@ git that refuses the flag beside `--create`, which would fail every `switch -c`.
 |---|---|---|---|---|
 | U65-1 | plain `switch <branch>` without `--no-overwrite-ignore` | X25 | X25 | KILLED; X26 and X22 green, as predicted |
 | U65-2 | `switch -c` without `--no-overwrite-ignore` | none | none | GUARD (X26): no compiling edit reddens it |
+
+## rw-git-old-place-001-retire · the old worktree place is unmanaged (W8, X12, U27, U28)
+
+W8, X12, U27 and U28 were red before the code: the old place was managed, so `where` printed `kind: managed` and a
+commit there on any branch but `robowright/<name>` was `head-not-own`.
+
+| # | Mutation | Predicted | Observed | Verdict |
+|---|---|---|---|---|
+| OLD-1 | `WORKTREE_FOLDERS` holds `.claude/worktrees` again | W8, X12, U27, U28 | W8, X12, U27, U28 | KILLED |
+| OLD-2 | `unmanaged_message_path` returns the path before the grant and deny check | U14, U28 | U14, U28, RefusalTests' main-checkout session-folder row | KILLED; also red: that row, a session folder outside every grant, as U28's |

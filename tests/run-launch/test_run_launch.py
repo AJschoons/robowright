@@ -2235,15 +2235,30 @@ class WorktreeCreationTests(LauncherCase):
                     (self.repo / ".worktrees").unlink()
                 self.assertFalse(self.worktree.exists())
 
-    def test_launcher__a_run_json_naming_the_old_place_is_still_made_and_started_there(self):
-        """WT-10: a session briefed before U46 names <repo>/.claude/worktrees/<slug>; it keeps working until torn down."""
-        legacy = self.repo / ".claude" / "worktrees" / SLUG
-        self.given_briefed(worktree=legacy)
+    def test_launcher__a_run_json_naming_a_missing_worktree_at_the_old_place_is_refused_and_nothing_is_made(self):
+        """WT-10: <repo>/.claude/worktrees/<slug> is the desktop app's place; the launcher makes a worktree only at
+        <repo>/.worktrees/<slug>, so a missing one named there is refused like any other path off the convention."""
+        old_place = self.repo / ".claude" / "worktrees" / SLUG
+        self.given_briefed(worktree=old_place)
+        self.stub_calls.write_text("")
+        code, out = self.launch("--yes")
+        self.assertEqual(code, 1, out)
+        self.assertIn("is not where the launcher makes one", out)
+        self.assertEqual(self.worktree_adds(), [])
+        self.assertFalse(old_place.exists())
+        self.assertEqual(self.stub_calls.read_text(), "")
+
+    def test_launcher__an_existing_worktree_at_the_old_place_is_started_where_it_is(self):
+        """WT-16: the launcher starts a Worker in an existing listed worktree under any worktrees/ or .worktrees/ path
+        component, the desktop app's <repo>/.claude/worktrees/<slug> included; rw-git then serves it by its own rule.
+        A declared guard: it catches this admission narrowed to .worktrees/ only."""
+        old_place = self.repo / ".claude" / "worktrees" / SLUG
+        subprocess.run(GIT + ["worktree", "add", "-q", "-b", BRANCH, str(old_place), self.base], cwd=self.repo, check=True, capture_output=True)
+        self.given_briefed(worktree=old_place)
         argv, out = self.start()
         self.assertTrue(argv, out)
-        self.assertEqual(self.rev(legacy, "HEAD"), self.base)
-        branch = subprocess.run(["git", "-C", str(legacy), "symbolic-ref", "--short", "HEAD"], capture_output=True, text=True)
-        self.assertEqual(branch.stdout.strip(), BRANCH)
+        self.assertEqual(self.worktree_adds(), [])
+        self.assertEqual((old_place / ".claude/autonomous-run").read_text().strip(), str(self.run_dir))
 
     def test_launcher__a_worktree_made_under_dot_worktrees_stays_out_of_the_main_checkouts_status(self):
         """WT-11: accept.sh refuses a dirty main clone, and git lists a nested worktree as untracked."""
@@ -2858,16 +2873,17 @@ class DirectLaunchTests(LauncherCase):
         self.assertEqual(code, 0, out)
         self.assertEqual(self.worktree_adds(), [])
         self.assertEqual(self.cwd_file.read_text().strip(), str(self.worktree))
-        legacy = self.repo / ".claude" / "worktrees" / SLUG
-        legacy.parent.mkdir(parents=True)
-        subprocess.run(GIT + ["worktree", "move", str(self.worktree), str(legacy)], cwd=self.repo, check=True, capture_output=True)
+        # A direct build's worktree is only ever at the convention path: the build's worktree moved to the old place is
+        # not looked for there, and nothing is made over its branch.
+        old_place = self.repo / ".claude" / "worktrees" / SLUG
+        old_place.parent.mkdir(parents=True)
+        subprocess.run(GIT + ["worktree", "move", str(self.worktree), str(old_place)], cwd=self.repo, check=True, capture_output=True)
         self.fresh_record()
         code, out = self.direct("--yes")
-        self.assertEqual(code, 0, out)
-        self.assertEqual(self.worktree_adds(), [])
-        self.assertEqual(self.cwd_file.read_text().strip(), str(legacy))
+        self.assert_refused(code, out, f"the branch {BRANCH} exists in {self.repo} but no worktree is at {self.worktree}; "
+                                       "nothing is made over it")
         self.assertFalse(self.worktree.exists())
-        subprocess.run(GIT + ["worktree", "move", str(legacy), str(self.worktree)], cwd=self.repo, check=True, capture_output=True)
+        subprocess.run(GIT + ["worktree", "move", str(old_place), str(self.worktree)], cwd=self.repo, check=True, capture_output=True)
         stray = self.root / "stray"
         subprocess.run(GIT + ["init", "-q", str(stray)], check=True, capture_output=True)
         subprocess.run(GIT + ["commit", "-q", "--allow-empty", "-m", "init"], cwd=stray, check=True, capture_output=True)

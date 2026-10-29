@@ -51,8 +51,8 @@ the subcommands below, each held to its shape, and keeps git from running any pr
 
 Where it runs. The directory, --dir's path or else the working directory, is a worktree a repository in launch.json's
 `repos` lists, or that repository's main checkout, checked as owner_git.py checks one: by canonical path, and with
-the worktree's own git directory. A worktree at <repo>/.worktrees/<slug>, or at the old place
-<repo>/.claude/worktrees/<slug>, owns the branches robowright/<slug> and robowright/<slug>-u<N>; the main checkout owns what an unmanaged checkout owns, below.
+the worktree's own git directory. A worktree at <repo>/.worktrees/<slug> owns the branches robowright/<slug> and
+robowright/<slug>-u<N>; the main checkout owns what an unmanaged checkout owns, below.
 A path is relative to the worktree or absolute inside it, passes through no linked folder, and names no `.git`. The message file is a plain
 file of at most 64 KiB under <sessions_root>/<slug>/ or <projects_root>/<project>/prs/<slug>/, reached through no link;
 so is a scope file. A commit that adds, removes or moves a gitlink (mode 160000) is refused, whatever the
@@ -176,7 +176,7 @@ PROTOCOLS = ("ssh", "https")
 # Apple Git reports the gitconfig inside its Xcode or Command Line Tools bundle as `unknown`.
 HELPER_SCOPES = ("system", "global", "unknown")
 MESSAGE_LIMIT = 64 * 1024
-WORKTREE_FOLDERS = (".worktrees", ".claude/worktrees")
+WORKTREE_FOLDERS = (".worktrees",)
 # What a merge, rebase, cherry-pick or revert stopped half way leaves in the git directory.
 STOPPED = ("MERGE_HEAD", "rebase-merge", "rebase-apply", "CHERRY_PICK_HEAD", "REVERT_HEAD", "sequencer")
 BRANCH_PREFIX = role_grants.BRANCH_PREFIX

@@ -62,8 +62,7 @@
 # --direct starts a direct build (the planner handbook → Size `S` or below), which has no run.json and no Robowright
 # Session. role_grants.py direct makes <repo>/.worktrees/<unit> on robowright/<unit> from --base with a Worker's
 # checks (a repository `repos` lists, no link or `.`/`..` at any prefix, a full commit id, attributes off), or reuses
-# it when it is already that repository's worktree of that branch, at the old <repo>/.claude/worktrees/<unit> too while
-# nothing is at the new place; anything else there is refused. The session is
+# it when it is already that repository's worktree of that branch; anything else there is refused. The session is
 # build-<unit>, started in the worktree with role_grants.py document's grants, no MCP servers, and one fixed prompt:
 # `Build directly from the briefing at <briefing>: read it in full, and follow it.` The briefing is a regular file
 # with one link, named one segment ending .md, directly in <project dir>/briefings/. The launch and a hand-off are
@@ -788,11 +787,7 @@ if [ "$DIRECT" = "true" ]; then
     PROJECT="$(spelled_path "$PROJECT")"
     REPO="$(spelled_path "$REPO")"
     BRIEFING="$(spelled_path "$BRIEFING")"
-    # role_grants.py direct_place: a build started before U46 keeps its worktree at the old place until it is torn down.
     WORKTREE="$REPO/.worktrees/$SLUG"
-    if [ ! -e "$WORKTREE" ] && [ ! -L "$WORKTREE" ] && { [ -e "$REPO/.claude/worktrees/$SLUG" ] || [ -L "$REPO/.claude/worktrees/$SLUG" ]; }; then
-        WORKTREE="$REPO/.claude/worktrees/$SLUG"
-    fi
     DIRECT_TOOL=(python3 "$GRANTS_TOOL" direct "$PROJECT" "$REPO" "$SLUG" "$BASE" "$BRIEFING")
     WORKTREE_LINE="$("${DIRECT_TOOL[@]}" plan)" || fail "--direct: no worktree for this build (above); nothing started"
     role_grants direct "$PROJECT" "$REPO" "$SLUG" "$BASE" "$BRIEFING" grants
