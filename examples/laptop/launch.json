@@ -18,6 +18,10 @@
 
   "projects_root": "~/Projects",
   "repos": ["~/Code/sample"],
+  "_worktrees_doc": "Rename _worktrees to worktrees to give a repository its own worktree shape instead of <repo>/.worktrees/<session> on robowright/<session>: the worktree is <root>/<session>, the branch fills {session}, and {ticket} and {slug} only on an install with a unit.ticket_regex (this one has none), and base_sha must be an ancestor of base. PROFILE-CONTRACT.md §6.",
+  "_worktrees": {
+    "~/Code/sample": {"root": "~/Code/sample-worktrees", "branch": "me/{session}", "base": "main"}
+  },
   "roles": {
     "planner": {
       "models_key": "planner",

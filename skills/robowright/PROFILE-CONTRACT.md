@@ -48,7 +48,17 @@ other context. A section that does not apply says `None on this machine.` — it
    names or `fnmatch` globs `rw-git` writes to in no unmanaged checkout of it. Every repository
    gets `main`, `master`, `develop`, `release/*`, `hotfix/*` and the branch `origin/HEAD` names;
    a list adds to that default, never replaces it, and a bad value refuses, by name, every
-   `rw-git` call in an unmanaged checkout. Its optional `push_remotes`, shaped the same, maps a
+   `rw-git` call in an unmanaged checkout. Its optional `worktrees` maps a repository path,
+   spelled as in `repos`, to the shape the launcher makes that repository's worktrees in:
+   `{"root", "branch", "base"}`. The worktree is always `<root>/<session dir name>`; `root` is
+   absolute or `~/`, no link at any prefix, not the main checkout, not inside another trusted
+   repository, and not at or under the sessions, projects or accounting root. `branch` names
+   `{session}` or `{slug}`, and may name `{ticket}`; `{ticket}` and `{slug}` split the session
+   directory's name by `unit.ticket_regex` as the launcher splits it, so an install with no
+   `ticket_regex` uses `{session}` only. Optional `base` is a local branch `base_sha` must be an
+   ancestor of. With no entry a repository keeps the convention, `<repo>/.worktrees/<session>` on
+   `robowright/<session>`. A malformed entry refuses, by name, that repository alone; `worktrees`
+   that is not an object refuses every one. Its optional `push_remotes`, shaped the same, maps a
    repository path to the remote names, each one plain segment, `rw-git push --remote` may push
    to besides `origin`; with none, a push goes to `origin` only, and `fetch --remote` is
    unchanged. A bad value refuses, by name, every `rw-git push` to a remote other than `origin`.

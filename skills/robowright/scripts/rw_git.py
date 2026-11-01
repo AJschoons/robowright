@@ -51,8 +51,10 @@ the subcommands below, each held to its shape, and keeps git from running any pr
 
 Where it runs. The directory, --dir's path or else the working directory, is a worktree a repository in launch.json's
 `repos` lists, or that repository's main checkout, checked as owner_git.py checks one: by canonical path, and with
-the worktree's own git directory. A worktree at <repo>/.worktrees/<slug> owns the branches robowright/<slug> and
-robowright/<slug>-u<N>; the main checkout owns what an unmanaged checkout owns, below.
+the worktree's own git directory. A worktree at the repository's shape, <root>/<slug>, is managed: <root> is
+<repo>/.worktrees, or the `root` of the repository's entry in launch.json's `worktrees` (a bad entry refuses every call
+in that repository), and it owns the shape's branch, robowright/<slug> or the entry's `branch` filled from <slug>, and
+<branch>-u<N>; the main checkout owns what an unmanaged checkout owns, below.
 A path is relative to the worktree or absolute inside it, passes through no linked folder, and names no `.git`. The message file is a plain
 file of at most 64 KiB under <sessions_root>/<slug>/ or <projects_root>/<project>/prs/<slug>/, reached through no link;
 so is a scope file. A commit that adds, removes or moves a gitlink (mode 160000) is refused, whatever the
@@ -176,10 +178,8 @@ PROTOCOLS = ("ssh", "https")
 # Apple Git reports the gitconfig inside its Xcode or Command Line Tools bundle as `unknown`.
 HELPER_SCOPES = ("system", "global", "unknown")
 MESSAGE_LIMIT = 64 * 1024
-WORKTREE_FOLDERS = (".worktrees",)
 # What a merge, rebase, cherry-pick or revert stopped half way leaves in the git directory.
 STOPPED = ("MERGE_HEAD", "rebase-merge", "rebase-apply", "CHERRY_PICK_HEAD", "REVERT_HEAD", "sequencer")
-BRANCH_PREFIX = role_grants.BRANCH_PREFIX
 # Protected in every unmanaged checkout, with the branch origin/HEAD names and any `protected_branches` list.
 DEFAULT_PROTECTED = ("main", "master", "develop", "release/*", "hotfix/*")
 ORIGIN_HEAD = "refs/remotes/origin/HEAD"
@@ -247,11 +247,11 @@ class Refused(Exception):
 
 
 class Place:
-    """Where rw-git runs: the checked worktree, its repository, its git directory, and its slug (None for the main
-    checkout), plus the options every git call carries."""
+    """Where rw-git runs: the checked worktree, its repository, its git directory, and its slug and the branch its
+    repository's shape gives it (both None for an unmanaged checkout), plus the options every git call carries."""
 
-    def __init__(self, worktree, repo, git_dir, slug):
-        self.worktree, self.repo, self.git_dir, self.slug = worktree, repo, git_dir, slug
+    def __init__(self, worktree, repo, git_dir, slug, branch):
+        self.worktree, self.repo, self.git_dir, self.slug, self.branch = worktree, repo, git_dir, slug, branch
         self.shown = []
         self.attributes, self.extra, self.protected = [], [], ()
         # The Owner's credential helpers, each a variable an --config-env option in `extra` names.
@@ -322,10 +322,20 @@ def locate(start) -> Place:
     except owner_git.Unlisted as refusal:
         raise Refused(refusal.code, refusal.detail) from None
     name = os.path.basename(worktree)
-    slug = None
-    if any(os.path.dirname(worktree) == os.path.join(repo, folder) for folder in WORKTREE_FOLDERS):
-        slug = name if role_grants.SEGMENT.fullmatch(name) else None
-    place = Place(worktree, repo, admin_dir(worktree, repo), slug)
+    slug, branch = None, None
+    try:
+        # The repository is the worktree's own, so a root two repositories declare is read on this one's shape.
+        shape = role_grants.shape_of(repo, repos)
+        if worktree != repo and os.path.dirname(worktree) == shape.root and role_grants.SEGMENT.fullmatch(name):
+            slug = name
+            # Only a declared branch goes through check-ref-format; the convention's is taken as is.
+            if shape.branch == role_grants.CONVENTION_BRANCH:
+                branch = shape.branch.replace("{session}", slug)
+            else:
+                branch = role_grants.place_of(repo, slug, repos)[1]
+    except role_grants.Refused as refusal:
+        raise Refused("launch-config", str(refusal)) from None
+    place = Place(worktree, repo, admin_dir(worktree, repo), slug, branch)
     place.attributes, place.extra, place.helpers = extra_options(place)
     if slug is None:
         place.protected = protected_patterns(repo) + origin_head(place)
@@ -439,12 +449,10 @@ def owner_helpers(place) -> list:
 # -- values ----------------------------------------------------------------------------------------------------------
 
 def is_own(place, branch) -> bool:
-    """A managed worktree owns robowright/<slug> and robowright/<slug>-u<N>; an unmanaged checkout every unprotected
-    branch."""
+    """A managed worktree owns its shape's branch and <branch>-u<N>; an unmanaged checkout every unprotected branch."""
     if place.slug is None:
         return not is_protected(place, branch)
-    own = BRANCH_PREFIX + place.slug
-    return branch == own or re.fullmatch(re.escape(own) + r"-u[1-9][0-9]*", branch) is not None
+    return branch == place.branch or re.fullmatch(re.escape(place.branch) + r"-u[1-9][0-9]*", branch) is not None
 
 
 def is_protected(place, branch) -> bool:
@@ -466,7 +474,7 @@ def own_branch(place, branch) -> str:
 def own_name(place) -> str:
     if place.slug is None:
         return f"protected here ({', '.join(owner_git.shown(name) for name in place.protected)})"
-    return f"{BRANCH_PREFIX}{place.slug} or {BRANCH_PREFIX}{place.slug}-u<N>"
+    return f"{place.branch} or {place.branch}-u<N>"
 
 
 def own_head(place, settled=True) -> str:

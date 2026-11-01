@@ -565,12 +565,13 @@ What it does, in order: read `PROJECT.md` (Status & Progress, Resolved Decisions
 **A unit sized `S` or below**, in the plan or not, gets the direct-build briefing instead of `BRIEF.md` and `run.json`: write it to `<project>/briefings/<unit>.md` from the Phase 6 template ("Size `S` or below"), run the doc-gate on it as on a brief, and print its `run-launch.sh --direct … --dry-run` line in place of the `--run-dir` one. The launcher has already made `<session_dir>` with only a `LEDGER.md` in it; leave it.
 
 **The launcher makes the worktree; `run.json` must say exactly where.** No session can write a repository's git
-directory, so the launcher creates a missing worktree as the Owner, and only from these values: `worktree` is
-`<main clone's real path>/.worktrees/<session dir name>`, `units[0].branch` is `robowright/<session dir name>`,
-and `base_sha` is the full 40-hex id of the brief's base (`git -C <main clone> rev-parse <base>^{commit}`), written
-now, not left for the Worker's preflight. A repository whose hook names another worktree convention gets the brief's
-`worktree` row as the full `git -C <main clone> worktree add -b <branch> <worktree> <base>` line, which the launcher's
-refusal also prints for the Owner to judge and run.
+directory, so the launcher creates a missing worktree as the Owner, and only from the repository's shape
+(`launch.json` → `worktrees`, `skills/robowright/PROFILE-CONTRACT.md` §6): `worktree` is `<root>/<session dir name>`
+and `units[0].branch` the declared `branch` with `{session}`, `{ticket}` and `{slug}` filled from the session
+directory's name. With no entry that is `<main clone's real path>/.worktrees/<session dir name>` on
+`robowright/<session dir name>`. `base_sha` is the full 40-hex id of the brief's base
+(`git -C <main clone> rev-parse <base>^{commit}`), on the declared `base` where there is one, written now, not left
+for the Worker's preflight.
 
 **A unit that needs a finished Robowright Session's commit** gets one `run.json.depends_on` entry
 per dependency, `{session, repo, path, ref, build_output}` — the Planner writes it, the Worker

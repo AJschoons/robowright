@@ -60,7 +60,8 @@
 #                 --briefing <project dir>/briefings/<file>.md [--model <m>] [--effort <e>] --dry-run
 #
 # --direct starts a direct build (the planner handbook → Size `S` or below), which has no run.json and no Robowright
-# Session. role_grants.py direct makes <repo>/.worktrees/<unit> on robowright/<unit> from --base with a Worker's
+# Session. role_grants.py direct makes the repository's shape's worktree for <unit> — <repo>/.worktrees/<unit> on
+# robowright/<unit> where launch.json's `worktrees` declares none — from --base with a Worker's
 # checks (a repository `repos` lists, no link or `.`/`..` at any prefix, a full commit id, attributes off), or reuses
 # it when it is already that repository's worktree of that branch; anything else there is refused. The session is
 # build-<unit>, started in the worktree with role_grants.py document's grants, no MCP servers, and one fixed prompt:
@@ -629,16 +630,26 @@ session_state() {
 # $3 is appended to the refusal: the one fix this caller knows for its state, or "".
 check_op() { python3 "$STATE_TOOL" "$1" check-op "$2" || fail "session-state.py check-op $2 said no (above); python3 $STATE_TOOL $1 status shows the state and what is legal from it$3"; }
 
-# A missing worktree the launcher will not make is refused with the command that recreates it, filled from run.json;
-# <base> is the reader's. The branch exists once preflight has passed, and `-b` refuses an existing branch, so
-# only a briefed session gets `-b`. A finished session's worktree is torn down on purpose, so it
-# gets no command.
+# A missing worktree the launcher will not make is refused with the command that recreates it, filled from the
+# repository's shape and the session folder's name where they derive one, else from run.json; `<base>` is left for
+# the reader to fill. The branch exists once preflight has passed, and `-b` refuses an existing branch, so only a
+# briefed session gets `-b`. A finished session's worktree is torn down on purpose, so it gets no command.
 fail_worktree_missing() {
-    local phase branch worktree
+    local phase branch worktree line
     # The hint's plain `worktree add` reads the base's attributes: on a git without --attr-source no line is safe to hand
     # over, since a checkout there runs, as the Owner, the filters a session names.
     python3 "$OWNER_GIT" attr-source || fail "worktree $2 does not exist, and this git cannot make it without running the filters its base names (above); nothing started"
     phase="$(jq -r '.phase // "preflight"' "$1/run.json")"
+    case "$phase" in
+        done|parked)
+            fail "worktree $2 does not exist
+run.json phase is $phase: the session is finished, so its worktree is not recreated" ;;
+    esac
+    # Where the session folder's name and the repository's shape derive the worktree, the hint holds those values.
+    if line="$(python3 "$GRANTS_TOOL" worktree "$1" hint 2>/dev/null)"; then
+        fail "worktree $2 does not exist
+create it per the project hook → Worktree, e.g.: $line"
+    fi
     branch="$(jq -r '.units[0]?.branch? // empty' "$1/run.json")"
     # The hint is a command the reader pastes.
     if [ -n "$branch" ]; then
@@ -647,9 +658,6 @@ fail_worktree_missing() {
     fi
     worktree="$(printf '%q' "$2")"
     case "$phase" in
-        done|parked)
-            fail "worktree $2 does not exist
-run.json phase is $phase: the session is finished, so its worktree is not recreated" ;;
         preflight)
             fail "worktree $2 does not exist
 create it per the project hook → Worktree, e.g.: git worktree add -b ${branch:-<branch>} $worktree <base>" ;;
@@ -660,9 +668,10 @@ create it per the project hook → Worktree, e.g.: git worktree add $worktree ${
 }
 
 # A session's sandbox cannot write a repository's git directory, so a missing worktree is made here, on the Owner's
-# side: only at the hook's <repo>/.worktrees/<session dir name> on robowright/<session dir name>, held to those
-# shapes by role_grants.py before git runs, and only once the state machine allows this launch. A dry run prints the
-# line and stops, since every later check reads the worktree.
+# side: only at the repository's shape — <root>/<session dir name> on the branch it derives, by default the hook's
+# <repo>/.worktrees/<session dir name> on robowright/<session dir name> — held to it by role_grants.py before git
+# runs, and only once the state machine allows this launch. A dry run prints the line and stops, since every later
+# check reads the worktree.
 make_worktree() {
     local op line
     line="$(python3 "$GRANTS_TOOL" worktree "$1" plan)" || fail_worktree_missing "$1" "$2"
@@ -787,9 +796,9 @@ if [ "$DIRECT" = "true" ]; then
     PROJECT="$(spelled_path "$PROJECT")"
     REPO="$(spelled_path "$REPO")"
     BRIEFING="$(spelled_path "$BRIEFING")"
-    WORKTREE="$REPO/.worktrees/$SLUG"
     DIRECT_TOOL=(python3 "$GRANTS_TOOL" direct "$PROJECT" "$REPO" "$SLUG" "$BASE" "$BRIEFING")
     WORKTREE_LINE="$("${DIRECT_TOOL[@]}" plan)" || fail "--direct: no worktree for this build (above); nothing started"
+    WORKTREE="$("${DIRECT_TOOL[@]}" path)" || fail "--direct: no worktree for this build (above); nothing started"
     role_grants direct "$PROJECT" "$REPO" "$SLUG" "$BASE" "$BRIEFING" grants
     PROFILE="${PROFILE:-standard}"
     check_profile "$PROFILE" "flag"
@@ -1375,12 +1384,13 @@ TOOLS="$(jq -r --arg lean "$LEAN_TOOLS" --arg known "$KNOWN_TOOLS" '
     elif (.tools | type) == "string" and (.tools | test("\\A[A-Za-z]+(,[A-Za-z]+)*\\z")) and ((.tools | split(",")) - ($known | split(",")) == []) then .tools
     else empty end' "$SESSION_DIR/run.json")"
 [ -n "$TOOLS" ] || fail "run.json 'tools' must be null or a comma-joined list of tool names from: $KNOWN_TOOLS"
-# Every worktree convention puts a worktrees/ or .worktrees/ component in the path. The main clone has none,
-# and the .git-file test below is what actually proves this is a linked worktree rather than a
-# checkout that merely sits there.
+# Every worktree convention puts a worktrees/ or .worktrees/ component in the path, and a declared one sits directly
+# in its repository's `worktrees` root. The main clone does neither, and the .git-file test below is what actually
+# proves this is a linked worktree rather than a checkout that merely sits there.
 case "$WORKTREE" in
     */worktrees/*|*/.worktrees/*) ;;
-    *) fail "worktree must live under a .worktrees/ or worktrees/ directory, never the main clone: $WORKTREE" ;;
+    *) python3 "$GRANTS_TOOL" shaped "$WORKTREE" >/dev/null \
+        || fail "worktree must live under a .worktrees/ or worktrees/ directory or a declared worktrees root, never the main clone: $WORKTREE" ;;
 esac
 # run.json.worktree is session-written: git runs inside it only once a configured repository lists
 # it (owner_git.py prints the refusal), and then only with owner_git.py's overrides.

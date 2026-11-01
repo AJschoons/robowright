@@ -548,3 +548,26 @@ commit there on any branch but `robowright/<name>` was `head-not-own`.
 |---|---|---|---|---|
 | OLD-1 | `WORKTREE_FOLDERS` holds `.claude/worktrees` again | W8, X12, U27, U28 | W8, X12, U27, U28 | KILLED |
 | OLD-2 | `unmanaged_message_path` returns the path before the grant and deny check | U14, U28 | U14, U28, RefusalTests' main-checkout session-folder row | KILLED; also red: that row, a session folder outside every grant, as U28's |
+
+## worktree-shape-001-declared-shape U2 · a worktree at the repository's declared shape is managed (WS1–WS24)
+
+WS1, WS2, WS4–WS7, WS13–WS15, WS17, WS19–WS22 and WS24 were red before the code. WS3, WS8–WS12, WS16, WS18 and WS23
+were green at red, as predicted: rw-git did not read `worktrees`, so the declared worktree was unmanaged. Each owed a
+kill first. One run of the four new classes per mutation, the red set predicted in writing first; three rounds.
+
+| # | Mutation | Predicted | Observed | Verdict |
+|---|---|---|---|---|
+| WSM-A | `locate` ignores the declaration: the root is `<repo>/.worktrees`, the branch `robowright/<slug>` | WS1 WS2 WS4–WS7 WS13–WS15 WS17 WS19–WS22 | the same | KILLED |
+| WSM-B | `is_own` drops the `-u<N>` siblings | WS3 WS23 | WS3 WS23 | KILLED |
+| WSM-C | a worktree anywhere under the root (`is_under`) is managed | WS12 | WS12 | KILLED |
+| WSM-D | `locate` also calls `role_grants.shaped(worktree)` | WS22 WS23 | 16 rows | KILLED; also red: every declared-worktree row and WS18, since `shaped` reads `owner_git.configured_repos()`, which the scratch projects root narrows to none (D16 gives rw-git `role_grants.repos()`) |
+| WSM-D2 | `locate` refuses a root another listed repository's shape also gives | WS22 WS23 | WS22 WS23 | KILLED |
+| WSM-E | a worktree whose parent is named `worktrees` is managed with no entry | WS8–WS11 | WS8–WS11 | KILLED |
+| WSM-F | `locate` reads every listed repository's shape | WS16 | WS16 | KILLED |
+| WSM-G | `role_grants.shape_of` validates every entry, whichever repository its key names | WS16 WS18 | WS16 WS18 | KILLED |
+| WSM-H | `--help` says "the shape" for "the repository's shape" | WS24 | WS24 | KILLED |
+
+Gate 1 (F2, F3) added WS26 and WS27, each red at `03cb56e` before the fix, which is their kill: WS26 both subtests
+(`launch-config` for `me/{ticket}/{slug}`, `kind: managed sample` for `me/{session}`), WS27 `launch-config: the branch
+robowright/v1..2 … is not a branch name git accepts`. The fix sets a slug only for a linked worktree and holds only a
+declared branch to `check-ref-format`.

@@ -924,3 +924,21 @@ the record lands it: a pick on a side branch, then fast-forwarded into a moved m
 
 M24, M25 and M29, run again on the fix, also redden D9. D9 takes the same `gone` path through the other routes, and it
 did not exist when those were predicted. M26–M28 match unchanged.
+
+## worktree-shape-001-declared-shape U3 · a declared session's branch and base (WSD1–WSD16)
+
+WSD1, WSD3–WSD6, WSD8 and WSD10–WSD16 were red before the code, on the card state. WSD2, WSD7 and WSD9 were green at
+red, as predicted: today's `robowright/<slug>` reading gives the same answer. Each owed a kill first. One run of the
+two new classes per mutation, the red set predicted in writing first; four rounds. WSD17 is the declared guard for
+every existing row (U3 check 6).
+
+| # | Mutation | Predicted | Observed | Verdict |
+|---|---|---|---|---|
+| WSDM-A | `is_in_main` reads any declared branch as in main | WSD2 WSD6 WSD16 | WSD2 WSD6 WSD16 | KILLED |
+| WSDM-B | `shape_branch` gives no branch for a declared shape | WSD1 WSD4 WSD7 WSD14 WSD15 | the same | KILLED |
+| WSDM-C | `shape_branches` asks every repository for `trusted[0]`'s branch | WSD9 | none | wrong prediction: the trusted list puts the second repository first, so `trusted[0]` is the one holding `robowright/SMPL-482-x` |
+| WSDM-C2 | `shape_branches` asks every repository for `trusted[-1]`'s branch | WSD9 | WSD9 | KILLED |
+
+WSD18 (the finish review's polish item, D8) was red at `fc8688d` before the fix (`complete` for `awaiting
+acceptance`: git read the bare `main` as the tag), which is its kill; the fix reads a declared base as
+`refs/heads/<base>`.

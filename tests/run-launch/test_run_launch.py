@@ -19,6 +19,7 @@ import time
 import unicodedata
 import unittest
 from datetime import datetime
+from unittest import mock
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[2] / "skills/robowright/scripts"
@@ -3077,6 +3078,667 @@ class TicketlessDirectTests(LauncherCase):
 
         code, out = self.direct("--dry-run", slug="Not-A-Unit_x")
         self.assert_refused(code, out, "--slug")
+
+
+# Declared worktree shape (DS rows, BEHAVIORS.md). The fixture: session SMPL-482-x, the entry
+# {root <root>/worktrees, branch me/{ticket}/{slug}, base main}, the unit block below.
+SESSION = "SMPL-482-x"
+SHAPE_BRANCH = "me/SMPL-482/x"
+SHAPE_UNIT = {
+    "ticket_regex": "^SMPL-[0-9]+$",
+    "ticket_example": "SMPL-482",
+    "slug_regex": "^[a-z0-9]+(-[a-z0-9]+)*$",
+    "slug_example": "export-csv",
+    "group_regex": "^([A-Z][A-Z0-9]*)-[0-9]+(-[a-z0-9]+)*$",
+}
+NO_TICKET_UNIT = dict(SHAPE_UNIT, ticket_regex=None, ticket_example=None)
+# The shared vector of session names both readers of a name are held to (DS-33 to DS-37).
+UNIT_NAMES = Path(__file__).resolve().parent / "unit-names.json"
+FIXTURE_ENTRY = object()
+WRONG_BRANCH = "is not %s, the branch the launcher makes a worktree on" % SHAPE_BRANCH
+NOT_TICKET_SLUG = "is not <ticket>-<slug> on this install"
+ENTRY_REFUSAL = "`worktrees` entry for"
+# Each a `worktrees` entry the Language calls malformed, or a root the launcher refuses, as entry() changes; None drops the key.
+MALFORMED = {
+    "missing branch": {"branch": None},
+    "a dir key": {"dir": "{ticket}-{slug}"},
+    "a placeholder outside the set": {"branch": "me/{unit}/x"},
+    "a branch with neither {session} nor {slug}": {"branch": "me/fixed"},
+    "a relative root": {"root": "worktrees"},
+    "a base that is not a string": {"base": 7},
+}
+
+
+def in_process_grants(case):
+    """role_grants imported into this process, reading the case's scratch HOME and no inherited root variable until the
+    case's cleanup."""
+    patcher = mock.patch.dict(os.environ, {"HOME": str(case.home)})
+    patcher.start()
+    case.addCleanup(patcher.stop)
+    for name in ("ROBOWRIGHT_ACCOUNTING_ROOT", "ROBOWRIGHT_SESSIONS_ROOT", "CLAUDE_USAGE_DIR"):
+        os.environ.pop(name, None)
+    if str(SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SCRIPTS))
+    import role_grants
+    return role_grants
+
+
+class DeclaredShapeTests(LauncherCase):
+    """DS rows (BEHAVIORS.md): a repository's `worktrees` entry in launch.json declares where its worktrees go and what
+    their branch is called; the launcher derives the one path and branch from it and the session directory's name, and
+    run.json's must equal them."""
+
+    rev = WorktreeCreationTests.rev
+    worktree_adds = WorktreeCreationTests.worktree_adds
+    repository_calls = WorktreeCreationTests.repository_calls
+    assert_refused_before_git = WorktreeCreationTests.assert_refused_before_git
+
+    def setUp(self):
+        # Named, not super(): ShapeApiTests borrows this setUp without inheriting the DS launcher tests.
+        LauncherCase.setUp(self)
+        self.repo = self.root / "repo"
+        self.base = self.given_repo(self.repo)
+        self.shape_root = self.root / "worktrees"
+        self.shape_root.mkdir()
+        self.run_dir = self.runs_root / SESSION
+        self.run_dir.mkdir()
+        self.worktree = self.shape_root / SESSION
+        self.given_declaration()
+        self.log = self.given_recording_git()
+
+    # ------------------------------------------------------------ given
+
+    def given_repo(self, repo):
+        """A repository on `main`: the base, then one commit after it, so the base is behind main's tip. Returns the base."""
+        subprocess.run(GIT + ["init", "-q", "-b", "main", str(repo)], check=True, capture_output=True)
+        subprocess.run(GIT + ["commit", "-q", "--allow-empty", "-m", "base"], cwd=repo, check=True, capture_output=True)
+        base = self.rev(repo, "HEAD")
+        subprocess.run(GIT + ["commit", "-q", "--allow-empty", "-m", "after the base"], cwd=repo, check=True, capture_output=True)
+        return base
+
+    def off_main(self):
+        """A commit of the repository whose parent is the base and which no branch holds, so main does not."""
+        return subprocess.run(GIT + ["commit-tree", "-p", self.base, "-m", "off main", self.base + "^{tree}"], cwd=self.repo,
+                              check=True, capture_output=True, text=True).stdout.strip()
+
+    def entry(self, **changes):
+        """The brief's declaration, root <root>/worktrees, with `changes` applied; a None drops the key."""
+        entry = dict({"root": str(self.shape_root), "branch": "me/{ticket}/{slug}", "base": "main"}, **changes)
+        return {key: value for key, value in entry.items() if value is not None}
+
+    def given_declaration(self, worktrees=FIXTURE_ENTRY, unit=SHAPE_UNIT, **config):
+        """launch.json with `unit` and `worktrees`: by default the repository's entry() alone; None writes no `worktrees`."""
+        if worktrees is FIXTURE_ENTRY:
+            worktrees = {str(self.repo): self.entry()}
+        launch = dict(LAUNCH_CONFIG, unit=unit, **config)
+        if worktrees is not None:
+            launch["worktrees"] = worktrees
+        self.given_launch_json(launch)
+
+    def given_session(self, name):
+        self.run_dir = self.runs_root / name
+        self.run_dir.mkdir(exist_ok=True)
+
+    def given_briefed(self, worktree=None, branch=SHAPE_BRANCH, base=None, **fields):
+        self.given_run(worktree=str(worktree or self.worktree), base_sha=self.base if base is None else base,
+                       unit_fields=({"branch": branch},), **fields)
+        self.log.write_text("")
+
+    # ------------------------------------------------------------ then
+
+    def checked_out(self, worktree):
+        return subprocess.run(["git", "-C", str(worktree), "symbolic-ref", "--short", "HEAD"], capture_output=True,
+                              text=True).stdout.strip()
+
+    def assert_refused_after_reads(self, code, out, named, path=None):
+        """WT-6's last three cases: a refusal that may read the repository first, and makes nothing."""
+        self.assertEqual(code, 1, out)
+        self.assertIn(named, out)
+        self.assertFalse((path or self.worktree).exists())
+        self.assertEqual(self.worktree_adds(), [])
+        self.assertNotIn("command:", out)
+
+    def main_status(self):
+        return subprocess.run(["git", "-C", str(self.repo), "status", "--porcelain"], capture_output=True, text=True).stdout
+
+    # ------------------------------------------------------------ rows
+
+    def test_launcher__a_dry_run_at_a_declared_shape_prints_the_derived_worktree_add_and_makes_nothing(self):
+        """DS-1: the Lead reads the derived line before anything is made — a convention line here names a worktree that is never made."""
+        self.given_briefed()
+
+        code, out = self.plan()
+
+        self.assertEqual(code, 0, out)
+        self.assertIn("worktree add -b %s %s %s" % (SHAPE_BRANCH, self.worktree, self.base), out)
+        self.assertFalse(self.worktree.exists())
+        self.assertEqual(self.worktree_adds(), [])
+
+    def test_launcher__a_declared_shapes_worktree_is_made_on_the_derived_branch_at_the_base(self):
+        """DS-2: the worktree is made at <root>/<session> on the derived branch at base_sha — anywhere else, or at main's tip, is not the work the brief planned."""
+        self.given_briefed()
+
+        argv, out = self.start()
+
+        self.assertTrue(argv, out)
+        self.assertEqual(self.rev(self.worktree, "HEAD"), self.base)
+        self.assertEqual(self.checked_out(self.worktree), SHAPE_BRANCH)
+        add = self.worktree_adds()
+        self.assertEqual(len(add), 1, add)
+        self.assertEqual(add[0][add[0].index("add"):],
+                         ["add", "--no-checkout", "-b", SHAPE_BRANCH, "--end-of-options", str(self.worktree), self.base])
+
+    def test_launcher__a_worktree_path_off_the_declared_shape_is_refused_before_git(self):
+        """DS-3: run.json.worktree is session-written — a path other than <root>/<session> would have the Owner's git make a worktree where a session chose."""
+        elsewhere = self.root / "elsewhere"
+        elsewhere.mkdir()
+        paths = {"beside the root's folder": self.root / SESSION,
+                 "holding `..`": Path(str(self.shape_root) + "/../worktrees/" + SESSION),
+                 "one level deeper": self.shape_root / "a" / SESSION,
+                 "the root a link to elsewhere": self.worktree,
+                 "named for another session": self.shape_root / "SMPL-483-y"}
+        for what, path in paths.items():
+            with self.subTest(what):
+                if what == "the root a link to elsewhere":
+                    self.shape_root.rmdir()
+                    self.shape_root.symlink_to(elsewhere)
+                self.given_briefed(worktree=path)
+
+                code, out = self.launch("--yes")
+
+                self.assert_refused_before_git(code, out, "is not where the launcher makes one", path)
+                self.assertEqual(list(elsewhere.iterdir()), [])
+                if what == "the root a link to elsewhere":
+                    self.shape_root.unlink()
+                    self.shape_root.mkdir()
+
+    def test_launcher__a_branch_other_than_the_derived_one_is_refused_before_git(self):
+        """DS-4: units[0].branch is session-written — the convention's branch or another ticket's would be made by the Owner's git."""
+        for branch in ("robowright/" + SESSION, "me/SMPL-483/x"):
+            with self.subTest(branch=branch):
+                self.given_briefed(branch=branch)
+
+                code, out = self.launch("--yes")
+
+                self.assert_refused_before_git(code, out, WRONG_BRANCH)
+
+    def test_launcher__run_json_ticket_never_names_the_derived_branch(self):
+        """DS-5: {ticket} comes from the directory name — a run.json ticket that moved it would let a session name another ticket's branch."""
+        self.given_briefed(branch="me/SMPL-483/x", ticket="SMPL-483")
+
+        code, out = self.launch("--yes")
+
+        self.assert_refused_before_git(code, out, WRONG_BRANCH)
+
+    def test_launcher__the_derived_branch_comes_from_the_directory_name_whatever_run_json_ticket_says(self):
+        """DS-6: a run.json ticket that disagrees with the directory name does not change the derived branch — reading it would move the branch with session text."""
+        self.given_briefed(ticket="SMPL-483")
+
+        code, out = self.plan()
+
+        self.assertEqual(code, 0, out)
+        self.assertIn("worktree add -b %s %s %s" % (SHAPE_BRANCH, self.worktree, self.base), out)
+
+    def test_launcher__a_derived_branch_that_exists_at_preflight_is_refused_by_name(self):
+        """DS-7: a branch already there at preflight, even at the base, is never made over — a new worktree on it would carry whatever it holds."""
+        subprocess.run(GIT + ["branch", SHAPE_BRANCH, self.base], cwd=self.repo, check=True, capture_output=True)
+        self.given_briefed()
+
+        code, out = self.launch("--yes")
+
+        self.assert_refused_after_reads(code, out, "exists in")
+        self.assertEqual(self.rev(self.repo, "refs/heads/" + SHAPE_BRANCH), self.base)
+
+    def test_launcher__on_the_convention_a_branch_that_exists_at_preflight_is_refused_by_name_too(self):
+        """DS-8: the existing-branch check runs for every shape — without it the convention falls through to git's own failure and no named refusal."""
+        self.given_declaration(worktrees=None)
+        convention = self.repo / ".worktrees" / SESSION
+        subprocess.run(GIT + ["branch", "robowright/" + SESSION, self.base], cwd=self.repo, check=True, capture_output=True)
+        self.given_briefed(worktree=convention, branch="robowright/" + SESSION)
+
+        code, out = self.launch("--yes")
+
+        self.assert_refused_after_reads(code, out, "exists in", convention)
+
+    def test_launcher__past_preflight_the_existing_derived_branch_is_attached_without_b(self):
+        """DS-9: past preflight the branch holds the session's commits — a new branch from the base would lose them."""
+        scratch = self.root / "scratch"
+        subprocess.run(GIT + ["branch", SHAPE_BRANCH, self.base], cwd=self.repo, check=True, capture_output=True)
+        subprocess.run(GIT + ["worktree", "add", "-q", str(scratch), SHAPE_BRANCH], cwd=self.repo, check=True, capture_output=True)
+        subprocess.run(GIT + ["commit", "-q", "--allow-empty", "-m", "the session's work"], cwd=scratch, check=True, capture_output=True)
+        work = self.rev(scratch, "HEAD")
+        subprocess.run(GIT + ["worktree", "remove", str(scratch)], cwd=self.repo, check=True, capture_output=True)
+        self.given_implementing(worktree=str(self.worktree), base_sha=self.base, unit_fields=({"branch": SHAPE_BRANCH},))
+        self.log.write_text("")
+
+        argv, out = self.start("--resume", NEW_ID)
+
+        self.assertTrue(argv, out)
+        self.assertEqual(self.rev(self.worktree, "HEAD"), work)
+        add = self.worktree_adds()
+        self.assertEqual(add[0][add[0].index("add"):], ["add", "--no-checkout", "--end-of-options", str(self.worktree), SHAPE_BRANCH])
+
+    def test_launcher__past_preflight_a_branch_other_than_the_derived_one_is_still_refused(self):
+        """DS-10: the shape is checked past preflight too — otherwise a resume attaches whatever branch run.json names."""
+        subprocess.run(GIT + ["branch", "robowright/" + SESSION, self.base], cwd=self.repo, check=True, capture_output=True)
+        self.given_implementing(worktree=str(self.worktree), base_sha=self.base, unit_fields=({"branch": "robowright/" + SESSION},))
+        self.log.write_text("")
+
+        code, out = self.launch("--resume", NEW_ID, "--yes")
+
+        self.assert_refused_after_reads(code, out, WRONG_BRANCH)
+
+    def test_launcher__a_base_sha_that_is_not_an_ancestor_of_the_declared_base_is_refused(self):
+        """DS-11: with `base` declared, base_sha must be on it — a commit off main would start the work from history main never had."""
+        self.given_briefed(base=self.off_main())
+
+        code, out = self.launch("--yes")
+
+        self.assert_refused_after_reads(code, out, "is not an ancestor of main")
+
+    def test_launcher__an_ancestor_check_git_cannot_answer_makes_nothing(self):
+        """DS-12: merge-base exiting other than 0 or 1 is an error, not a no — reading it as yes would make a worktree nobody checked."""
+        shim = self.root / "shim"
+        shim.mkdir()
+        (shim / "git").write_text('#!/bin/sh\ncase " $* " in *" merge-base "*) exit 128 ;; esac\nexec "%s" "$@"\n'
+                                  % (self.root / "bin" / "git"))
+        (shim / "git").chmod(0o755)
+        self.given_briefed()
+
+        code, out = self.launch("--yes", env=dict(self.env, PATH=f"{shim}:{self.env['PATH']}"))
+
+        self.assert_refused_after_reads(code, out, "could not check")
+
+    def test_launcher__a_declared_base_that_names_no_branch_cannot_be_checked(self):
+        """DS-13: a `base` with no refs/heads entry makes git's ancestor check fail, which is "could not check" — never a yes (assumed Q5)."""
+        self.given_declaration({str(self.repo): self.entry(base="release")})
+        self.given_briefed()
+
+        code, out = self.launch("--yes")
+
+        self.assert_refused_after_reads(code, out, "could not check")
+
+    def test_launcher__with_no_declared_base_there_is_no_ancestor_check(self):
+        """DS-14: `base` is optional — a check with no declared base would refuse work the Owner never asked to be on a branch."""
+        off = self.off_main()
+        self.given_declaration({str(self.repo): self.entry(base=None)})
+        self.given_briefed(base=off)
+
+        code, out = self.plan()
+
+        self.assertEqual(code, 0, out)
+        self.assertIn("worktree add -b %s %s %s" % (SHAPE_BRANCH, self.worktree, off), out)
+
+    def test_launcher__a_declared_root_in_a_place_a_session_or_another_repository_owns_is_refused(self):
+        """DS-15: the Owner's git must never be pointed at a folder a session or another repository owns (assumed Q1)."""
+        other = self.root / "other"
+        self.given_repo(other)
+        self.given_owner_repos(self.repo, other)
+        projects = self.root / "owner-projects"
+        accounting = self.root / "accounting"
+        roots = {"under the sessions root": self.runs_root / "worktrees",
+                 "the sessions root itself": self.runs_root,
+                 "under the projects root": projects / "worktrees",
+                 "under the accounting root": accounting / "worktrees",
+                 "inside another trusted repository": other / "worktrees",
+                 "the main checkout itself": self.repo}
+        for what, root in roots.items():
+            with self.subTest(what):
+                root.mkdir(parents=True, exist_ok=True)
+                self.given_declaration({str(self.repo): self.entry(root=str(root))}, projects_root=str(projects),
+                                       accounting_root=str(accounting))
+                self.given_briefed(worktree=root / SESSION)
+
+                code, out = self.launch("--yes")
+
+                self.assert_refused_before_git(code, out, ENTRY_REFUSAL, root / SESSION / ".git")
+
+    def test_launcher__a_root_inside_the_checkout_is_excluded_once_and_the_status_stays_clean(self):
+        """DS-16: accept.sh refuses a dirty main clone, and git lists a nested worktree as untracked — the computed line is what keeps it clean."""
+        inside = self.repo / "wt"
+        inside.mkdir()
+        self.given_declaration({str(self.repo): self.entry(root=str(inside))})
+        self.given_briefed(worktree=inside / SESSION)
+        self.assertTrue(self.start()[0])
+        self.given_session("SMPL-483-y")
+        self.given_briefed(worktree=inside / "SMPL-483-y", branch="me/SMPL-483/y")
+
+        self.assertTrue(self.start()[0])
+
+        exclude = (self.repo / ".git" / "info" / "exclude").read_text().splitlines()
+        self.assertEqual(exclude.count("/wt/"), 1, exclude)
+        self.assertEqual(self.main_status(), "")
+
+    def test_launcher__the_computed_exclude_line_is_its_own_line_after_a_last_line_with_no_newline(self):
+        """DS-17: appended bare, the computed line would merge into the last line and ignore nothing (WT-12, for the computed line)."""
+        inside = self.repo / "wt"
+        inside.mkdir()
+        (self.repo / ".git" / "info" / "exclude").write_text("/sample-local")
+        self.given_declaration({str(self.repo): self.entry(root=str(inside))})
+        self.given_briefed(worktree=inside / SESSION)
+
+        self.assertTrue(self.start()[0])
+
+        exclude = (self.repo / ".git" / "info" / "exclude").read_text().splitlines()
+        self.assertEqual(exclude[:2], ["/sample-local", "/wt/"])
+        self.assertEqual(self.main_status(), "")
+
+    def test_launcher__a_root_outside_the_checkout_writes_no_worktrees_exclude_line(self):
+        """DS-18: a root outside the checkout cannot dirty its status — a line written anyway is a stray rule in a file every worktree shares (assumed Q11)."""
+        self.given_briefed()
+
+        self.assertTrue(self.start()[0])
+
+        exclude = (self.repo / ".git" / "info" / "exclude").read_text().splitlines()
+        self.assertEqual([line for line in exclude if "worktrees" in line and not line.startswith("#")], [], exclude)
+
+    def test_launcher__a_malformed_entry_refuses_its_repositorys_launch_by_name(self):
+        """DS-19: a malformed entry is refused by name before git — read loosely it would derive a path or branch the Owner never declared (assumed Q1)."""
+        for what, change in MALFORMED.items():
+            with self.subTest(what):
+                self.given_declaration({str(self.repo): self.entry(**change)})
+                self.given_briefed()
+
+                code, out = self.launch("--yes")
+
+                self.assert_refused_before_git(code, out, ENTRY_REFUSAL)
+
+    def test_launcher__a_place_two_repositories_shapes_share_is_refused(self):
+        """DS-45: run.json names no repository, so a <root>/<session> two shapes give is no one place — picking either makes the worktree in a repository the brief may not mean."""
+        other = self.root / "other"
+        self.given_repo(other)
+        self.given_owner_repos(self.repo, other)
+        self.given_declaration({str(self.repo): self.entry(), str(other): self.entry()})
+        self.given_briefed()
+
+        code, out = self.launch("--yes")
+
+        self.assert_refused_after_reads(code, out, "more than one repository")
+
+    def test_launcher__a_malformed_entry_leaves_a_repository_with_no_entry_launching_as_before(self):
+        """DS-20: one repository's malformed entry refuses that repository alone — refusing the others stops every unrelated session."""
+        other = self.root / "other"
+        other_base = self.given_repo(other)
+        self.given_owner_repos(self.repo, other)
+        self.given_session("SMPL-483-y")
+        convention = other / ".worktrees" / "SMPL-483-y"
+        for what, change in MALFORMED.items():
+            with self.subTest(what):
+                self.given_declaration({str(self.repo): self.entry(**change)})
+                self.given_briefed(worktree=convention, branch="robowright/SMPL-483-y", base=other_base)
+
+                code, out = self.plan()
+
+                self.assertEqual(code, 0, out)
+                self.assertIn("worktree add -b robowright/SMPL-483-y %s %s" % (convention, other_base), out)
+
+    def test_launcher__a_worktrees_value_out_of_shape_refuses_every_repository(self):
+        """DS-21: `worktrees` not an object, or a key no repository path, is Owner config out of shape — read as absent it would serve a repository the convention the Owner meant to replace (assumed Q2)."""
+        convention = self.repo / ".worktrees" / SESSION
+        for what, worktrees in (("a list", []), ("a key that is no repository path", {"sample": self.entry()})):
+            with self.subTest(what):
+                self.given_declaration(worktrees)
+                self.given_briefed(worktree=convention, branch="robowright/" + SESSION)
+
+                code, out = self.launch("--yes")
+
+                self.assert_refused_after_reads(code, out, "`worktrees`", convention)
+
+    def test_launcher__an_entry_keyed_to_no_located_repository_is_unused(self):
+        """DS-22: an entry whose key matches no repository asked is neither read nor validated — validating it would refuse launches it has nothing to do with."""
+        convention = self.repo / ".worktrees" / SESSION
+        self.given_declaration({str(self.root / "elsewhere"): {"branch": "me/fixed"}})
+        self.given_briefed(worktree=convention, branch="robowright/" + SESSION)
+
+        code, out = self.plan()
+
+        self.assertEqual(code, 0, out)
+        self.assertIn("worktree add -b robowright/%s %s %s" % (SESSION, convention, self.base), out)
+
+    def test_launcher__an_entry_keyed_by_a_home_relative_link_to_the_repository_applies_to_it(self):
+        """DS-23: a key is matched as `protected_branches` keys are, realpath(home_path(key)) — a literal compare would skip a declaration the Owner wrote as `repos` spells it."""
+        (self.home / "sample-link").symlink_to(self.repo)
+        self.given_declaration({"~/sample-link": self.entry()})
+        self.given_briefed()
+
+        code, out = self.plan()
+
+        self.assertEqual(code, 0, out)
+        self.assertIn("worktree add -b %s %s %s" % (SHAPE_BRANCH, self.worktree, self.base), out)
+
+    def test_launcher__a_derived_branch_git_does_not_accept_is_refused_and_nothing_is_made(self):
+        """DS-24: the derived branch must pass check-ref-format — a ref git refuses reaches `worktree add -b` otherwise."""
+        self.given_declaration({str(self.repo): self.entry(branch="me/{session}.lock")})
+        self.given_briefed(branch="me/%s.lock" % SESSION)
+
+        code, out = self.launch("--yes")
+
+        self.assert_refused_after_reads(code, out, "me/%s.lock" % SESSION)
+
+    def test_launcher__ticket_and_slug_placeholders_are_refused_on_an_install_with_no_ticket_shape(self):
+        """DS-25: with no unit.ticket_regex no name splits — filling {ticket} from anywhere else would read run.json's ticket."""
+        self.given_declaration(unit=NO_TICKET_UNIT)
+        self.given_briefed(ticket="SMPL-482")
+
+        code, out = self.launch("--yes")
+
+        self.assert_refused_before_git(code, out, NOT_TICKET_SLUG)
+
+    def test_launcher__ticket_and_slug_placeholders_are_refused_for_a_name_that_does_not_split(self):
+        """DS-26: a directory name with no <ticket>-<slug> split cannot fill {ticket} or {slug} — a guess would name some other branch."""
+        self.given_session("SMPL482")
+        self.given_briefed(worktree=self.shape_root / "SMPL482", ticket="SMPL-482")
+
+        code, out = self.launch("--yes")
+
+        self.assert_refused_before_git(code, out, NOT_TICKET_SLUG, self.shape_root / "SMPL482")
+
+    def test_launcher__a_refused_worktrees_hint_is_the_derived_line_with_run_jsons_full_base(self):
+        """DS-27: the hand-run hint shows the values the launcher would make — run.json's own values would hand the Owner the line just refused."""
+        self.given_briefed(branch="robowright/" + SESSION)
+
+        code, out = self.launch("--yes")
+
+        self.assertEqual(code, 1, out)
+        self.assertIn("git -C %s worktree add -b %s %s %s" % (self.repo, SHAPE_BRANCH, self.worktree, self.base), out)
+
+    def test_launcher__a_refused_worktrees_hint_holds_a_base_placeholder_when_run_jsons_is_not_a_full_id(self):
+        """DS-28: a base_sha that is not 40 hex never reaches the hint — `<base>` stands in, so no pasted line names an ambiguous id."""
+        self.given_briefed(base="abc1234")
+
+        code, out = self.launch("--yes")
+
+        self.assertEqual(code, 1, out)
+        self.assertIn("git -C %s worktree add -b %s %s <base>" % (self.repo, SHAPE_BRANCH, self.worktree), out)
+
+
+class ShapeApiTests(LauncherCase):
+    """DS-38 to DS-43 (BEHAVIORS.md): role_grants' derivation called in this process, as rw-git and the dashboard will
+    call it. DeclaredShapeTests' fixture, borrowed so its launcher tests do not run twice."""
+
+    setUp = DeclaredShapeTests.setUp
+    rev = DeclaredShapeTests.rev
+    given_repo = DeclaredShapeTests.given_repo
+    entry = DeclaredShapeTests.entry
+    given_declaration = DeclaredShapeTests.given_declaration
+
+    def test_names_of__a_slug_name_on_an_install_with_no_ticket_shape_has_no_split(self):
+        """DS-38: with no ticket_regex a name is a slug, whole — a split here would invent a {ticket} the install has no shape for."""
+        self.given_declaration(unit=NO_TICKET_UNIT)
+        grants = in_process_grants(self)
+
+        self.assertIsNone(grants.names_of("export-csv"))
+
+    def test_names_of__a_name_slug_regex_refuses_on_an_install_with_no_ticket_shape_is_refused(self):
+        """DS-39: with no ticket_regex a name slug_regex refuses is no unit name — accepting it lets any directory name a branch."""
+        self.given_declaration(unit=NO_TICKET_UNIT)
+        grants = in_process_grants(self)
+
+        with self.assertRaises(grants.Refused):
+            grants.names_of(SESSION)
+
+    def test_place_of__a_declared_repository_derives_its_root_and_filled_branch(self):
+        """DS-40: place_of is the one derivation the launcher, rw-git and the dashboard share — a different answer here splits their idea of a session's branch."""
+        grants = in_process_grants(self)
+
+        self.assertEqual(grants.place_of(str(self.repo), SESSION, [str(self.repo)]), (str(self.worktree), SHAPE_BRANCH))
+
+    def test_shape_of__a_repository_with_no_entry_has_the_convention(self):
+        """DS-41: no entry is the convention, unchecked — anything else changes every repository that declared nothing (assumed Q4)."""
+        self.given_declaration(worktrees=None)
+        grants = in_process_grants(self)
+
+        shape = grants.shape_of(str(self.repo), [str(self.repo)])
+
+        self.assertEqual((shape.root, shape.branch, shape.base), (f"{self.repo}/.worktrees", "robowright/{session}", None))
+
+    def test_place_of__a_session_placeholder_alone_works_on_an_install_with_no_ticket_shape(self):
+        """DS-42: {session} needs no split — refusing it with no ticket_regex leaves such an install no declared branch at all."""
+        self.given_declaration({str(self.repo): self.entry(branch="me/{session}")}, unit=NO_TICKET_UNIT)
+        grants = in_process_grants(self)
+
+        self.assertEqual(grants.place_of(str(self.repo), "export-csv", [str(self.repo)]),
+                         (str(self.shape_root / "export-csv"), "me/export-csv"))
+
+    def test_place_of__a_home_relative_root_is_expanded(self):
+        """DS-43: `root` may be written `~/` — left unexpanded, the worktree would be a relative path under whatever folder the tool ran in."""
+        (self.home / "worktrees").mkdir()
+        self.given_declaration({str(self.repo): self.entry(root="~/worktrees")})
+        grants = in_process_grants(self)
+
+        self.assertEqual(grants.place_of(str(self.repo), SESSION, [str(self.repo)]),
+                         (str(self.home / "worktrees" / SESSION), SHAPE_BRANCH))
+
+
+class DeclaredDirectTests(LauncherCase):
+    """DS-29 to DS-32 (BEHAVIORS.md): DL's fixture and helpers, borrowed so the DL tests do not run twice, with the brief's
+    declaration for the repository, its default branch named main, and the session name as --slug."""
+
+    with_projects_root = DirectLaunchTests.with_projects_root
+    given_registering_stub = DirectLaunchTests.given_registering_stub
+    rev = DirectLaunchTests.rev
+    direct = DirectLaunchTests.direct
+    started_argv = DirectLaunchTests.started_argv
+    worktree_adds = DirectLaunchTests.worktree_adds
+    repository_calls = DirectLaunchTests.repository_calls
+    assert_refused = DirectLaunchTests.assert_refused
+
+    def setUp(self):
+        DirectLaunchTests.setUp(self)
+        subprocess.run(GIT + ["branch", "-M", "main"], cwd=self.repo, check=True, capture_output=True)
+        self.shape_root = self.root / "worktrees"
+        self.shape_root.mkdir()
+        self.worktree = self.shape_root / SESSION
+        entry = {"root": str(self.shape_root), "branch": "me/{ticket}/{slug}", "base": "main"}
+        self.given_launch_json(dict(LAUNCH_CONFIG, unit=SHAPE_UNIT, projects_root=str(self.projects),
+                                    worktrees={str(self.repo): entry}))
+
+    def values(self, **values):
+        found = {"project": self.project, "slug": SESSION, "repo": self.repo, "base": self.base, "briefing": self.briefing}
+        found.update(values)
+        return found
+
+    def test_direct__the_worktree_is_made_at_the_declared_root_on_the_derived_branch_from_the_base(self):
+        """DS-29: --direct honours the shape — a build made at <repo>/.worktrees on robowright/<slug> is not where rw-git or the dashboard look for it."""
+        code, out = self.direct("--yes")
+
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.rev(self.worktree, "HEAD"), self.base)
+        branch = subprocess.run(["git", "-C", str(self.worktree), "symbolic-ref", "--short", "HEAD"], capture_output=True, text=True)
+        self.assertEqual(branch.stdout.strip(), SHAPE_BRANCH)
+        add = self.worktree_adds()
+        self.assertEqual(len(add), 1, add)
+        self.assertEqual(add[0][add[0].index("add"):],
+                         ["add", "--no-checkout", "-b", SHAPE_BRANCH, "--end-of-options", str(self.worktree), self.base])
+        self.assertEqual(self.cwd_file.read_text().strip(), str(self.worktree))
+
+    def test_direct__the_builds_worktree_at_the_declared_root_is_reused(self):
+        """DS-30: a second --direct finds the build's worktree at the shape — looking only at the convention would refuse it as a branch with no worktree."""
+        subprocess.run(GIT + ["worktree", "add", "-q", "-b", SHAPE_BRANCH, str(self.worktree), self.base], cwd=self.repo,
+                       check=True, capture_output=True)
+
+        code, out = self.direct("--yes")
+
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.worktree_adds(), [])
+        self.assertEqual(self.cwd_file.read_text().strip(), str(self.worktree))
+
+    def test_direct__a_slug_with_no_ticket_split_is_refused_where_the_branch_names_ticket_and_slug(self):
+        """DS-31: a --slug in_unit_form accepts whole has no {ticket} — filling it anyway would make up a branch."""
+        code, out = self.direct("--dry-run", slug="export-csv")
+
+        self.assert_refused(code, out, NOT_TICKET_SLUG, before_git=True)
+
+    def test_direct__a_base_that_is_not_an_ancestor_of_the_declared_base_is_refused(self):
+        """DS-32: --direct's --base is held to the declared base as run.json's base_sha is — a build off main would start from history main never had (assumed Q6)."""
+        off = subprocess.run(GIT + ["commit-tree", "-p", self.base, "-m", "off main", self.base + "^{tree}"], cwd=self.repo,
+                             check=True, capture_output=True, text=True).stdout.strip()
+
+        code, out = self.direct("--dry-run", base=off)
+
+        self.assert_refused(code, out, "is not an ancestor of main")
+
+
+class UnitNameVectorTests(LauncherCase):
+    """DS-33 to DS-37 (BEHAVIORS.md): the launcher's in_unit_form and role_grants.names_of hold the one list in
+    unit-names.json to the same verdicts under its unit block. The launcher half reads in_unit_form's verdict where
+    `--direct --slug` prints it; DL's fixture and helpers, borrowed so the DL tests do not run twice."""
+
+    with_projects_root = DirectLaunchTests.with_projects_root
+    given_registering_stub = DirectLaunchTests.given_registering_stub
+    rev = DirectLaunchTests.rev
+    values = DirectLaunchTests.values
+    direct = DirectLaunchTests.direct
+
+    def setUp(self):
+        DirectLaunchTests.setUp(self)
+        self.vector = json.loads(UNIT_NAMES.read_text())
+        config = json.loads((self.home / ".claude/robowright/launch.json").read_text())
+        self.given_launch_json(dict(config, unit=self.vector["unit"]))
+
+    def names(self, verdict, split=None):
+        return [case for case in self.vector["names"] if case["verdict"] == verdict
+                and (split is None or (case["split"] == "whole") == (split == "whole"))]
+
+    def test_launcher__in_unit_form_accepts_each_name_the_shared_vector_accepts(self):
+        """DS-33: the launcher's reading of a name is the reference names_of follows — a vector that disagreed with it would hold the twin to the wrong answer."""
+        for case in self.names("accept"):
+            with self.subTest(name=case["name"]):
+                code, out = self.direct("--dry-run", slug=case["name"])
+
+                self.assertEqual(code, 0, out)
+                self.assertNotIn("--slug must be a unit name", out)
+
+    def test_launcher__in_unit_form_rejects_each_name_the_shared_vector_rejects(self):
+        """DS-34: in_unit_form rejects what the vector rejects — the twin is held to these verdicts, so a wrong one here is a wrong one there."""
+        for case in self.names("reject"):
+            with self.subTest(name=case["name"]):
+                code, out = self.direct("--dry-run", slug=case["name"])
+
+                self.assertEqual(code, 1, out)
+                self.assertIn("--slug must be a unit name on this install", out)
+
+    def test_names_of__splits_each_shared_ticket_slug_name_where_in_unit_form_does(self):
+        """DS-35: names_of splits at in_unit_form's hyphen — a different split gives rw-git and the launcher two branches for one session."""
+        grants = in_process_grants(self)
+        for case in self.names("accept", split="pair"):
+            with self.subTest(name=case["name"]):
+                self.assertEqual(grants.names_of(case["name"]), tuple(case["split"]))
+
+    def test_names_of__accepts_each_shared_whole_slug_name_with_no_split(self):
+        """DS-36: a name slug_regex matches whole is accepted before any split — splitting it fills {ticket} for a name in_unit_form read as no ticket."""
+        grants = in_process_grants(self)
+        for case in self.names("accept", split="whole"):
+            with self.subTest(name=case["name"]):
+                self.assertIsNone(grants.names_of(case["name"]))
+
+    def test_names_of__refuses_each_name_the_shared_vector_rejects(self):
+        """DS-37: names_of refuses what in_unit_form refuses — accepting more lets a name the launcher never takes derive a branch in rw-git."""
+        grants = in_process_grants(self)
+        for case in self.names("reject"):
+            with self.subTest(name=case["name"]):
+                with self.assertRaises(grants.Refused):
+                    grants.names_of(case["name"])
 
 
 if __name__ == "__main__":

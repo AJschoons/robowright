@@ -1222,3 +1222,74 @@ Fixture: project `sample` naming one trusted scratch repository with `robowright
 
 Text mode and `--once` are accepted untested: each runs one refresh in its process, so neither filling nor reading the
 cache there changes anything a test can see.
+
+## WSD · a declared worktree shape (worktree-shape U3)
+
+`launch.json` → `"worktrees"` declares, per repository, where its worktrees go and what their branch is called:
+`{root, branch, base}`, the worktree always `<root>/<session>`. The dashboard reads a session's branch from the shape
+of each trusted repository it asks, never `robowright/<slug>` for a declared one, and a declared repository's main is
+its `base`. Written before the code, from the worktree-shape brief: its Goal, Language, Settled decisions (D-numbers),
+A2, U3 build and U3 checks 1–6, and the `has_reached_main` hotspot.
+
+Fixture (`DeclaredShapeInMain`): both roots; project `sample` whose `robowright.json` names one scratch repository,
+listed in `repos`; `unit` `ticket_regex` `^SMPL-[0-9]+$`, `slug_regex` `^[a-z0-9]+(-[a-z0-9]+)*$`; `worktrees`
+`{"<repo>": {"root": "<scratch>/worktrees", "branch": "me/{ticket}/{slug}", "base": "main"}}`, all written in one
+`given_launch_settings`, since it replaces the whole file. Session `SMPL-482-x`, done and through intake,
+`run.json.ticket` `SMPL-482` and `project` `sample`, claimed by U1 (Unit cell `` `SMPL-482` ``). `me/SMPL-482/x` one
+commit ahead of `main`, or merged where the row says. "On disk" is a linked worktree at `<scratch>/worktrees/SMPL-482-x`
+on `me/SMPL-482/x`. "Gone" is `run.json.worktree` naming that place with nothing there. "Second repository" is
+`<scratch>/repos/other`, which only project `other` names, listed in `repos`. Declared, it is root
+`<scratch>/other-worktrees` with the same branch and base. The predicate is U1's line of `robowright-dash.py sample`,
+read as 039-L8 reads it: in main is `complete`, not in main is `awaiting acceptance`.
+
+Fixture (`DeclaredShapeDirectBuild`): a direct build `sample-001-first` of the declared repository, branch
+`me/{session}`, no `unit` block. `{session}` is used because a dashboard direct-build name is `<project>-<NNN>-<name>`,
+not `<ticket>-<slug>`, and D4 says `{session}` alone works on any install. Its worktree is
+`<scratch>/worktrees/sample-001-first` on `me/sample-001-first`, one commit ahead of `main`. It has a change
+description and no live session.
+
+Rules:
+- R1 — A done session of a declared repository is in main when its shape's branch is in main. That is the branch its
+  shape derives from its session directory name. It is read in its listed worktree, else in the trusted repository
+  that holds the branch.
+- R2 — The convention's branch `robowright/<session>` says nothing about a declared repository's session.
+- R3 — A finished session counts as gone (so in main) only when every trusted repository has been asked for its own
+  shape's branch and none holds it, and no worktree of the session is on disk.
+- R4 — A repository whose shape gives no branch is no evidence: the session reads not in main and the page renders.
+  That covers a malformed entry, and a session name the shape's `{ticket}`/`{slug}` cannot be filled from.
+- R5 — `{ticket}` and `{slug}` come from the session directory name, never from `run.json.ticket`.
+- R6 — A declared repository's main is its declared `base`, ahead of `origin/HEAD`.
+- R7 — A direct build of a declared repository is found by its shape's branch, and its accept record is checked
+  against that branch.
+- R8 — With no `worktrees` entry, every existing dash row passes unchanged.
+
+Q3 is the one Assumed row (WSD12): a session name the shape's `{ticket}`/`{slug}` cannot be filled from reads not in
+main. It is not a "malformed entry" in the brief's Language. The brief says in main only on positive evidence (039),
+and D2 says "the one allowed path and branch", so falling back to the convention is ruled out. Not pinned: a declared
+`base` that is no local branch, and `worktrees` itself out of shape (D16). The brief gives the dashboard no observable
+value for either.
+
+| # | Rule | Given | When | Then | Expected value from | Test |
+|---|---|---|---|---|---|---|
+| WSD1 | R1 | on disk; `me/SMPL-482/x` merged into `main` | `robowright-dash.py sample` | U1 reads `complete` | U3 check 1: "whose `me/SMPL-482/x` is merged into `main` reads `complete`" | `test_reads_a_declared_session_complete__when_its_shape_branch_is_merged_into_main` |
+| WSD2 | R1 | on disk; `me/SMPL-482/x` unmerged | `sample` | U1 reads `awaiting acceptance` | U3 check 2: "exists unmerged reads `awaiting acceptance`, with … its worktree on disk" (green at red; owes a kill) | `test_reads_a_declared_session_awaiting_acceptance__when_its_shape_branch_is_unmerged_and_its_worktree_is_on_disk` |
+| WSD3 | R1 | gone; `me/SMPL-482/x` unmerged | `sample` | U1 reads `awaiting acceptance` | U3 check 2: "… or without its worktree on disk" | `test_reads_a_declared_session_awaiting_acceptance__when_its_shape_branch_is_unmerged_and_its_worktree_is_gone` |
+| WSD4 | R2 | gone; `me/SMPL-482/x` merged; `robowright/SMPL-482-x` one commit ahead of `main` | `sample` | U1 reads `complete` | U3 check 3: "`robowright/SMPL-482-x` existing in that repository changes neither answer" — check 1's | `test_reads_a_declared_session_complete__when_its_shape_branch_is_merged_and_the_convention_branch_is_not` |
+| WSD5 | R2 | gone; `me/SMPL-482/x` unmerged; `robowright/SMPL-482-x` at `main` | `sample` | U1 reads `awaiting acceptance` | U3 check 3, check 2's answer, read in the repository that holds the branch | `test_reads_a_declared_session_awaiting_acceptance__when_the_convention_branch_is_in_main_and_its_shape_branch_is_not` |
+| WSD6 | R2 | on disk; `me/SMPL-482/x` unmerged; `robowright/SMPL-482-x` at `main` | `sample` | U1 reads `awaiting acceptance` | U3 check 3, check 2's answer, read in the listed worktree | `test_reads_a_declared_session_awaiting_acceptance__when_the_convention_branch_is_in_main_and_its_worktree_on_its_shape_branch_is_not` |
+| WSD7 | R3 | gone; `me/SMPL-482/x` deleted | `sample` | U1 reads `complete` | U3 check 4: "gone from every trusted repository, its worktree gone, reads `complete` (as `039-L9` does …)" (green at red; owes a kill) | `test_reads_a_declared_session_complete__when_its_shape_branch_and_its_worktree_are_both_gone` |
+| WSD8 | R3 | as WSD7; a declared second repository holding `me/SMPL-482/x` unmerged | `sample` | U1 reads `awaiting acceptance` | hotspot `has_reached_main`: "must ask each repository for its own shape's branch, so a declared-shape session is never read as in main while its branch lives unmerged"; 039-L14 | `test_reads_a_declared_session_awaiting_acceptance__when_another_declared_trusted_repository_holds_its_shape_branch_unmerged` |
+| WSD9 | R3 | as WSD7; an undeclared second repository holding `robowright/SMPL-482-x` unmerged | `sample` | U1 reads `awaiting acceptance` | the same hotspot, "its own shape's branch"; D2 "The convention is the declaration `{… branch: "robowright/{session}"}`" (green at red; owes a kill) | `test_reads_a_declared_session_awaiting_acceptance__when_an_undeclared_trusted_repository_holds_its_convention_branch_unmerged` |
+| WSD10 | R4 | gone; `me/SMPL-482/x` merged; the entry also has `dir` | `sample` | exit 0; U1 reads `awaiting acceptance` | U3 check 5: "A malformed entry reads `awaiting acceptance`; the page still renders"; Language "Malformed entry … an unknown key" | `test_reads_a_session_awaiting_acceptance__when_its_repositorys_worktrees_entry_has_an_unknown_key` |
+| WSD11 | R4 | gone; `me/SMPL-482/x` merged; `branch` `me/fixed` | `sample` | exit 0; U1 reads `awaiting acceptance` | U3 check 5; Language "a `branch` with neither `{session}` nor `{slug}`" | `test_reads_a_session_awaiting_acceptance__when_its_repositorys_worktrees_entry_names_a_branch_two_sessions_would_share` |
+| WSD12 | R4 | session `SMPL482` (Unit cell and ticket `SMPL482`), gone; no branch for it in the repository | `sample` | U1 reads `awaiting acceptance` | *Assumed* (Q3): D4 "a name the split does not fit, refuses by name"; 039 "in main only on positive evidence" | `test_reads_a_session_awaiting_acceptance__when_its_name_does_not_split_into_the_ticket_and_slug_its_shape_branch_names` |
+| WSD13 | R5 | gone; `run.json.ticket` `SMPL-483` (Unit cell `` `SMPL-483` ``); `me/SMPL-483/x` at `main`; `me/SMPL-482/x` unmerged | `sample` | U1 reads `awaiting acceptance` | D4 "never from `run.json.ticket`"; Language "Derived from the directory name … never from `run.json.ticket`" | `test_reads_a_declared_session_awaiting_acceptance__when_run_json_ticket_names_another_ticket_whose_branch_is_in_main` |
+| WSD14 | R6 | on disk; `me/SMPL-482/x` merged into `main`; local `develop` at `main~1`; `origin/HEAD` → `origin/develop` | `sample` | U1 reads `complete` | A2 "returns the declared `base` when the repository has one, else `origin/HEAD`"; U3 build "`default_branch` … prefers the declared `base`" | `test_reads_a_declared_session_complete__when_its_branch_is_in_its_declared_base_and_origin_head_names_another_branch` |
+| WSD15 | R7 | the direct-build fixture; an uncommitted file in its worktree | `sample` | U1 reads `working` | U3 build "the four `robowright/{slug}` sites (… `:496` …) become the shape's branch"; D13; 039 bound 1 and L11 "finished only with nothing uncommitted" | `test_reads_a_declared_direct_build_working__when_its_worktree_on_its_shape_branch_holds_uncommitted_work` |
+| WSD16 | R7 | the direct-build fixture; main moved, then a pick of `me/sample-001-first`; `ACCEPTED.json` naming `main~1`; the branch kept | `sample` | U1 reads `with the Lead` | U3 build (`:721`); 055 bound 1 "while [the branch] is still in any trusted repository … the patch-id of the branch's diff"; 055-A5 | `test_reads_a_declared_direct_build_with_the_lead__when_its_accept_record_names_a_commit_on_main_that_is_not_its_shape_branchs_change` |
+| WSD17 | R8 | no `worktrees` entry | the whole suite | every existing dash row passes; no existing test edited | U3 check 6; brief invariant "with no `worktrees` entry, behaviour is byte-for-byte today's". **Declared guard** | every test before `WSD` |
+| WSD18 | R6 | on disk; `me/SMPL-482/x` unmerged; a tag `main` at its tip | `sample` | U1 reads `awaiting acceptance` | D8 "`base` is optional, a local branch name … an ancestor of `refs/heads/<base>`"; the finish review's polish item | `DeclaredShapeInMain.test_reads_a_declared_session_awaiting_acceptance__when_a_tag_shares_its_declared_base_name_at_its_unmerged_branch` |
+
+Expected at red (before the dashboard change; the caller runs it): WSD2, WSD7 and WSD9 pass, because today's
+`robowright/<slug>` reading gives the same answer for them. Each owes its kill in `TEST-LEDGER.md`. Every other row
+fails on its assertion.

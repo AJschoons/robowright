@@ -96,6 +96,7 @@ ROSTER = load_clone_script("run_roster", "skills/lead/scripts/run-roster.py")
 RUN_COST = load_clone_script("run_cost", "skills/worker/scripts/run-cost.py")
 COST_ROLLUP = load_clone_script("robowright_cost", "skills/robowright/scripts/robowright-cost.py")
 OWNER_GIT = load_clone_script("owner_git", "skills/robowright/scripts/owner_git.py")
+ROLE_GRANTS = load_clone_script("role_grants", "skills/robowright/scripts/role_grants.py")
 LAUNCH_SETTINGS, LAUNCH_UNREAD = ROSTER.read_launch_json()
 CONFIG = LAUNCH_SETTINGS or {}
 ACCOUNTING_ROOT = RUN_COST.accounting_root(None)
@@ -490,12 +491,13 @@ def slug_in(name: str) -> str | None:
     return None
 
 
-def direct_worktree(slug: str, agent: dict | None, branches: dict) -> str:
-    """The worktree a trusted repository lists on `robowright/<slug>`, wherever it is on disk; else the live session's
-    cwd, which finds a build on a branch named some other way."""
-    found = branches.get(f"robowright/{slug}")
-    if found:
-        return found[0]
+def direct_worktree(slug: str, agent: dict | None, branches: dict, trusted: list) -> str:
+    """The worktree a trusted repository lists on its shape's branch for `slug`, wherever it is on disk; else the live
+    session's cwd, which finds a build on a branch named some other way."""
+    for repo in trusted:
+        found = branches.get(shape_branch(repo, slug, trusted))
+        if found and found[1] == repo:
+            return found[0]
     return agent["cwd"] if agent and agent.get("cwd") else ""
 
 
@@ -529,13 +531,13 @@ def direct_builds(agents: list, known: set, hidden: set) -> list:
                 if project_of(slug) == folder.name and session_number(slug):
                     slugs[unit_key(slug)] = slug
     found = []
-    listed, branches = listed_worktrees(), listed_branches()
+    listed, branches, trusted = listed_worktrees(), listed_branches(), trusted_repos()
     for key, slug in sorted(slugs.items()):
         if key in known:
             continue
         prs = PROJECTS_ROOT / project_of(slug) / "prs"
         worker = workers.get(key)
-        worktree = direct_worktree(slug, worker, branches)
+        worktree = direct_worktree(slug, worker, branches, trusted)
         is_working = (worker or {}).get("status") in ROSTER.RUNNING_STATUSES
         checked = listed_worktree(worktree, listed) if worktree else None
         is_dirty = bool(checked and git(checked[0], "status", "--porcelain", "--ignore-submodules=all"))
@@ -619,20 +621,50 @@ def by_recency(sessions: list) -> list:
     return sorted(live, key=key, reverse=True) + sorted(rest, key=key, reverse=True)
 
 
-def default_branch(cwd: str) -> str:
+def shape_of(repo: str, trusted: list):
+    """A trusted repository's worktree shape; None when its `worktrees` entry is out of shape."""
+    try:
+        return ROLE_GRANTS.shape_of(repo, trusted)
+    except ROLE_GRANTS.Refused:
+        return None
+
+
+def shape_branch(repo: str, slug: str, trusted: list) -> str | None:
+    """The branch `repo`'s shape gives the session `slug`, filled from the name and never from run.json; None when its
+    entry, or the name, gives none. The convention's `robowright/<slug>` is not held to check-ref-format."""
+    shape = shape_of(repo, trusted)
+    if shape is None:
+        return None
+    if shape.branch == ROLE_GRANTS.CONVENTION_BRANCH:
+        return f"robowright/{slug}"
+    try:
+        return ROLE_GRANTS.place_of(repo, slug, trusted)[1]
+    except ROLE_GRANTS.Refused:
+        return None
+
+
+def default_branch(cwd: str, repo: str, trusted: list) -> str:
+    """`repo`'s declared `base`, as the local branch so no tag of that name is read; else origin/HEAD's branch, else
+    main."""
+    shape = shape_of(repo, trusted)
+    if shape is not None and shape.base is not None:
+        return f"refs/heads/{shape.base}"
     head = git(cwd, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
     candidate = head.split("/", 1)[1] if head and "/" in head else "main"
     return candidate if git(cwd, "rev-parse", "--verify", "--quiet", candidate) else "main"
 
 
-def is_in_main(session: dict, worktree: str) -> bool:
-    """Only finished work can be in main; a branch with no commits yet is trivially an ancestor of main."""
+def is_in_main(session: dict, worktree: str, repo: str, trusted: list) -> bool:
+    """Only finished work can be in main; a branch with no commits yet is trivially an ancestor of main. A repository
+    whose shape gives the session no branch is no evidence."""
     if session["tone"] != "done":
         return False
+    branch = shape_branch(repo, session["slug"], trusted)
+    if branch is None:
+        return False
     run = session["run"]
-    main = default_branch(worktree)
+    main = default_branch(worktree, repo, trusted)
     heads = [u.get("head") for u in run.get("units") or [] if u.get("head")]
-    branch = f'robowright/{session["slug"]}'
     ref = heads[-1] if heads else branch
     if git(worktree, "merge-base", "--is-ancestor", "--end-of-options", ref, main) is not None:
         return True
@@ -709,7 +741,7 @@ def is_change_of(repo: str, sha: str, branch: str) -> bool:
 
 def is_accept_recorded(session: dict, trusted: list, verified: dict | None) -> bool:
     """A direct build's accept record names a commit on main in a trusted repository its project names, and while
-    `robowright/<slug>` is still in any trusted repository, a commit on that repository's main carrying the branch's
+    its shape's branch is still in any trusted repository, a commit on that repository's main carrying the branch's
     change. The project folder is session-writable, so the record alone is not evidence; once the branch is gone there is
     nothing left to compare, or to lose."""
     sha = recorded_accept(session)
@@ -718,15 +750,14 @@ def is_accept_recorded(session: dict, trusted: list, verified: dict | None) -> b
     repos = project_repos(session["project"], trusted) if sha else None
     if repos is None:
         return False
-    branch = f'robowright/{session["slug"]}'
-    held = {repo: has_branch(repo, branch) for repo in trusted}
+    branches, held = shape_branches(session["slug"], trusted)
     # A repository the project names must answer; another trusted one that cannot is read as not holding the branch.
     if any(held.get(repo) is None for repo in repos):
         return False
     holders = [repo for repo, is_held in held.items() if is_held]
     on_main = [repo for repo in (holders or repos)
-               if git(repo, "merge-base", "--is-ancestor", "--end-of-options", sha, default_branch(repo)) is not None]
-    is_recorded = any(is_change_of(repo, sha, branch) for repo in on_main) if holders else bool(on_main)
+               if git(repo, "merge-base", "--is-ancestor", "--end-of-options", sha, default_branch(repo, repo, trusted)) is not None]
+    is_recorded = any(is_change_of(repo, sha, branches[repo]) for repo in on_main) if holders else bool(on_main)
     # Held only when every trusted repository answered: one that could not may hold the branch.
     if is_recorded and verified is not None and None not in held.values():
         verified[session["slug"]] = sha
@@ -742,9 +773,16 @@ def has_branch(repo: str, branch: str) -> bool | None:
     return {0: True, 1: False}.get(found.returncode)
 
 
-def is_branch_in_main(repo: str, branch: str) -> bool:
+def shape_branches(slug: str, trusted: list) -> tuple:
+    """(repo → the branch its own shape gives `slug`, repo → whether it holds that branch), the second None where the
+    shape gives none or git cannot say."""
+    branches = {repo: shape_branch(repo, slug, trusted) for repo in trusted}
+    return branches, {repo: has_branch(repo, branch) if branch is not None else None for repo, branch in branches.items()}
+
+
+def is_branch_in_main(repo: str, branch: str, trusted: list) -> bool:
     """The branch itself, never a tip the session wrote: in the main clone a symbolic tip such as `HEAD` is main."""
-    main = default_branch(repo)
+    main = default_branch(repo, repo, trusted)
     ref = f"refs/heads/{branch}"
     return (git(repo, "merge-base", "--is-ancestor", "--end-of-options", ref, main) is not None
             or is_squashed_into(repo, ref, main))
@@ -752,22 +790,21 @@ def is_branch_in_main(repo: str, branch: str) -> bool:
 
 def has_reached_main(session: dict, listed: dict, trusted: list, verified: dict | None) -> bool:
     """A finished session's branch is in main, read in its listed worktree or in the trusted repository that holds the
-    branch; or `robowright/<slug>` is gone from every trusted repository while its project names at least one trusted
+    branch; or each trusted repository's own shape's branch is gone from it while its project names at least one trusted
     repository and each of those answers, and no worktree of it is left on disk, since teardown deletes the branch only after an accept. A missing
     worktree alone says nothing."""
     worktree = session["run"].get("worktree")
     is_path = isinstance(worktree, str) and bool(worktree)
     checked = listed_worktree(worktree, listed) if is_path else None
     if checked:
-        return is_in_main(session, checked[0])
+        return is_in_main(session, checked[0], checked[1], trusted)
     own = project_repos(session["project"], trusted)
     # Teardown removes the worktree before the branch: one still on disk was never torn down.
     if own is None or (is_path and os.path.isdir(worktree)) or not BRANCH_SLUG.fullmatch(session["slug"]):
         return False
     if verified is not None and verified.get(session["slug"]) == GONE:
         return True
-    branch = f'robowright/{session["slug"]}'
-    held = {repo: has_branch(repo, branch) for repo in trusted}
+    branches, held = shape_branches(session["slug"], trusted)
     # A repository the project names must answer; another trusted one that cannot is read as not holding the branch.
     if any(held[repo] is None for repo in own):
         return False
@@ -775,7 +812,7 @@ def has_reached_main(session: dict, listed: dict, trusted: list, verified: dict 
     # Held only when every trusted repository answered: one that could not may hold the branch.
     if not holders and verified is not None and None not in held.values():
         verified[session["slug"]] = GONE
-    return any(is_branch_in_main(repo, branch) for repo in holders) if holders else True
+    return any(is_branch_in_main(repo, branches[repo], trusted) for repo in holders) if holders else True
 
 
 def in_main_slugs(sessions: list, verified: dict | None) -> set:

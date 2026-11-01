@@ -7794,5 +7794,266 @@ class InMainCache(DashScratch):
         self.assertEqual(self.completion(first), "100%")
         self.assertEqual(self.completion(second_body), "0%")
 
+
+# ---------------------------------------------------------------- WSD · a declared worktree shape
+
+
+# A launched session of a declared repository: its folder name, the ticket run.json carries, and the branch the shape
+# `me/{ticket}/{slug}` derives from the folder name under SHAPE_UNIT.
+SHAPED = "SMPL-482-x"
+SHAPED_TICKET = "SMPL-482"
+SHAPED_BRANCH = "me/SMPL-482/x"
+SHAPED_CONVENTION_BRANCH = f"robowright/{SHAPED}"
+SHAPE_BRANCH = "me/{ticket}/{slug}"
+SHAPE_UNIT = {"ticket_regex": "^SMPL-[0-9]+$", "slug_regex": "^[a-z0-9]+(-[a-z0-9]+)*$"}
+# A direct build of a declared repository whose branch is `me/{session}`: the dashboard's direct-build names are
+# `<project>-<NNN>-<name>`, never `<ticket>-<slug>`, and `{session}` alone works on any install.
+DIRECT_BRANCH = f"me/{SLUG}"
+
+
+class DeclaredShapeInMain(DashScratch):
+    """WSD — project `sample` naming one scratch repository that launch.json lists in `repos` and declares in
+    `worktrees`: root `<scratch>/worktrees`, branch `me/{ticket}/{slug}`, base `main`, with SHAPE_UNIT. One finished
+    session, `SMPL-482-x`, ticket `SMPL-482`, claimed by U1. A done session is in main only by its shape's branch."""
+
+    assert_unit_reads = InMainTruth.assert_unit_reads
+
+    # ------------------------------------------------------------ given
+
+    def given_declared_repo(self, merged, unit=SHAPED_TICKET, **entry):
+        """Project `sample` (U1 `unit`) naming the scratch repository, `me/SMPL-482/x` one commit ahead of main there and
+        merged when `merged`; launch.json carrying both roots, `repos`, `unit` and the repository's `worktrees` entry —
+        the fixture's, with `entry`'s keys added or replacing its own."""
+        self.sessions.mkdir(parents=True, exist_ok=True)
+        self.projects.mkdir(parents=True, exist_ok=True)
+        self.folder = self.given_project(unit=unit)
+        self.repo = self.given_repo(SHAPED_BRANCH, merged)
+        self.root = self.base / "worktrees"
+        self.root.mkdir()
+        self.given_settings(self.folder, "robowright.json", {"repos": [{"name": "sample", "path": str(self.repo)}]})
+        declared = dict({"root": str(self.root), "branch": SHAPE_BRANCH, "base": "main"}, **entry)
+        self.given_launch_settings(sessions_root=str(self.sessions), projects_root=str(self.projects),
+                                   repos=[str(self.repo)], unit=SHAPE_UNIT, worktrees={str(self.repo): declared})
+
+    def given_worktree_at_its_place(self):
+        """The session's worktree where the shape puts it, `<root>/SMPL-482-x`, on `me/SMPL-482/x`."""
+        worktree = self.root / SHAPED
+        self.git(self.repo, "worktree", "add", "-q", str(worktree), SHAPED_BRANCH)
+        return worktree
+
+    def gone_place(self, name=SHAPED):
+        """Where the shape puts the session's worktree, with nothing there: the worktree is gone."""
+        return self.root / name
+
+    def given_shaped_session(self, worktree, name=SHAPED, ticket=SHAPED_TICKET):
+        return self.given_finished_session(slug=name, ticket=ticket, project="sample", worktree=str(worktree))
+
+    def given_branch_at_main(self, repo, branch):
+        self.git(repo, "branch", branch, "main")
+
+    def given_branch_ahead_of_main(self, repo, branch):
+        """`branch` one commit ahead of main with a file main never gets, so neither its history nor its tree is main's."""
+        self.git(repo, "checkout", "-q", "-b", branch, "main")
+        (repo / "another.txt").write_text("another unit\n")
+        self.git(repo, "add", "another.txt")
+        self.git(repo, "commit", "-q", "-m", "another unit")
+        self.git(repo, "checkout", "-q", "main")
+
+    def given_second_trusted_repo(self, branch, declared):
+        """A second scratch repository that only project `other` names, listed in `repos`, holding `branch` one commit
+        ahead of its main; declared in `worktrees` (root `<scratch>/other-worktrees`, the fixture's branch and base)
+        when `declared`, else at the convention."""
+        other_project = self.given_project(name="other")
+        other = self.base / "repos" / "other"
+        other.mkdir(parents=True)
+        self.git(other, "init", "-q", "-b", "main")
+        self.git(other, "commit", "-q", "--allow-empty", "-m", "base")
+        self.given_branch_ahead_of_main(other, branch)
+        self.given_settings(other_project, "robowright.json", {"repos": [{"name": "other", "path": str(other)}]})
+        settings = json.loads(self.launch_json.read_text())
+        settings["repos"].append(str(other))
+        if declared:
+            root = self.base / "other-worktrees"
+            root.mkdir()
+            settings["worktrees"][str(other)] = {"root": str(root), "branch": SHAPE_BRANCH, "base": "main"}
+        self.given_launch_settings(**settings)
+        return other
+
+    # ------------------------------------------------------------ the shape's branch decides
+
+    def test_reads_a_declared_session_complete__when_its_shape_branch_is_merged_into_main(self):
+        """WSD1 — a done `SMPL-482-x` whose worktree at its place is on `me/SMPL-482/x`, merged into main, reads complete — every accepted session of a declared repository waits on the Owner forever."""
+        self.given_declared_repo(merged=True)
+        self.given_shaped_session(self.given_worktree_at_its_place())
+
+        self.assert_unit_reads("complete")
+
+    def test_reads_a_declared_session_awaiting_acceptance__when_its_shape_branch_is_unmerged_and_its_worktree_is_on_disk(self):
+        """WSD2 — a done `SMPL-482-x` whose worktree at its place is on `me/SMPL-482/x`, not in main, reads awaiting acceptance — unaccepted work reads as landed and is torn down unseen."""
+        self.given_declared_repo(merged=False)
+        self.given_shaped_session(self.given_worktree_at_its_place())
+
+        self.assert_unit_reads("awaiting acceptance")
+
+    def test_reads_a_declared_session_awaiting_acceptance__when_its_shape_branch_is_unmerged_and_its_worktree_is_gone(self):
+        """WSD3 — a done `SMPL-482-x` whose worktree is gone while `me/SMPL-482/x` lives unmerged reads awaiting acceptance — the convention's branch being absent reads as "torn down", so unaccepted work reads as landed."""
+        self.given_declared_repo(merged=False)
+        self.given_shaped_session(self.gone_place())
+
+        self.assert_unit_reads("awaiting acceptance")
+
+    # ------------------------------------------------------------ the convention's branch says nothing
+
+    def test_reads_a_declared_session_complete__when_its_shape_branch_is_merged_and_the_convention_branch_is_not(self):
+        """WSD4 — `me/SMPL-482/x` merged, `robowright/SMPL-482-x` unmerged in the same repository, the worktree gone: complete — a stray convention branch holds an accepted session awaiting acceptance."""
+        self.given_declared_repo(merged=True)
+        self.given_branch_ahead_of_main(self.repo, SHAPED_CONVENTION_BRANCH)
+        self.given_shaped_session(self.gone_place())
+
+        self.assert_unit_reads("complete")
+
+    def test_reads_a_declared_session_awaiting_acceptance__when_the_convention_branch_is_in_main_and_its_shape_branch_is_not(self):
+        """WSD5 — `robowright/SMPL-482-x` at main, `me/SMPL-482/x` unmerged, the worktree gone: awaiting acceptance — a branch any session can make at main lands a declared session's unaccepted work."""
+        self.given_declared_repo(merged=False)
+        self.given_branch_at_main(self.repo, SHAPED_CONVENTION_BRANCH)
+        self.given_shaped_session(self.gone_place())
+
+        self.assert_unit_reads("awaiting acceptance")
+
+    def test_reads_a_declared_session_awaiting_acceptance__when_the_convention_branch_is_in_main_and_its_worktree_on_its_shape_branch_is_not(self):
+        """WSD6 — `robowright/SMPL-482-x` at main, the worktree at its place on unmerged `me/SMPL-482/x`: awaiting acceptance — read in the listed worktree, the convention's branch lands unaccepted work."""
+        self.given_declared_repo(merged=False)
+        self.given_branch_at_main(self.repo, SHAPED_CONVENTION_BRANCH)
+        self.given_shaped_session(self.given_worktree_at_its_place())
+
+        self.assert_unit_reads("awaiting acceptance")
+
+    # ------------------------------------------------------------ gone from every trusted repository
+
+    def test_reads_a_declared_session_complete__when_its_shape_branch_and_its_worktree_are_both_gone(self):
+        """WSD7 — `me/SMPL-482/x` deleted and the worktree gone, as teardown leaves an accepted session: complete — every session accepted before `run.json.accepted` existed reads as not in main."""
+        self.given_declared_repo(merged=False)
+        self.git(self.repo, "branch", "-D", SHAPED_BRANCH)
+        self.given_shaped_session(self.gone_place())
+
+        self.assert_unit_reads("complete")
+
+    def test_reads_a_declared_session_awaiting_acceptance__when_another_declared_trusted_repository_holds_its_shape_branch_unmerged(self):
+        """WSD8 — the branch gone from `sample`'s repository, while a second trusted, declared repository holds `me/SMPL-482/x` unmerged: awaiting acceptance — asking every repository for `robowright/<slug>` reads a living branch as gone."""
+        self.given_declared_repo(merged=False)
+        self.git(self.repo, "branch", "-D", SHAPED_BRANCH)
+        self.given_second_trusted_repo(SHAPED_BRANCH, declared=True)
+        self.given_shaped_session(self.gone_place())
+
+        self.assert_unit_reads("awaiting acceptance")
+
+    def test_reads_a_declared_session_awaiting_acceptance__when_an_undeclared_trusted_repository_holds_its_convention_branch_unmerged(self):
+        """WSD9 — the branch gone from `sample`'s repository, while a second trusted repository with no entry holds `robowright/SMPL-482-x` unmerged: awaiting acceptance — one repository's shape asked of every repository reads the other's branch as gone."""
+        self.given_declared_repo(merged=False)
+        self.git(self.repo, "branch", "-D", SHAPED_BRANCH)
+        self.given_second_trusted_repo(SHAPED_CONVENTION_BRANCH, declared=False)
+        self.given_shaped_session(self.gone_place())
+
+        self.assert_unit_reads("awaiting acceptance")
+
+    # ------------------------------------------------------------ no shape, no evidence
+
+    def test_reads_a_session_awaiting_acceptance__when_its_repositorys_worktrees_entry_has_an_unknown_key(self):
+        """WSD10 — the repository's entry also carries `dir`, `me/SMPL-482/x` merged, the worktree gone: awaiting acceptance, and the page renders — a refused declaration reads as "branch gone", so complete."""
+        self.given_declared_repo(merged=True, dir="{ticket}-{slug}")
+        self.given_shaped_session(self.gone_place())
+
+        self.assert_unit_reads("awaiting acceptance")
+
+    def test_reads_a_session_awaiting_acceptance__when_its_repositorys_worktrees_entry_names_a_branch_two_sessions_would_share(self):
+        """WSD11 — the repository's entry has `branch` `me/fixed`, `me/SMPL-482/x` merged, the worktree gone: awaiting acceptance, and the page renders — a refused declaration reads as "branch gone", so complete."""
+        self.given_declared_repo(merged=True, branch="me/fixed")
+        self.given_shaped_session(self.gone_place())
+
+        self.assert_unit_reads("awaiting acceptance")
+
+    def test_reads_a_session_awaiting_acceptance__when_its_name_does_not_split_into_the_ticket_and_slug_its_shape_branch_names(self):
+        """WSD12 — a done session `SMPL482` of the declared repository, its worktree gone, no branch for it anywhere: awaiting acceptance — a branch the shape cannot derive reads as "gone", or as the convention's (assumed Q3)."""
+        self.given_declared_repo(merged=True, unit="SMPL482")
+        self.given_shaped_session(self.gone_place("SMPL482"), name="SMPL482", ticket="SMPL482")
+
+        self.assert_unit_reads("awaiting acceptance")
+
+    # ------------------------------------------------------------ the name, never run.json.ticket
+
+    def test_reads_a_declared_session_awaiting_acceptance__when_run_json_ticket_names_another_ticket_whose_branch_is_in_main(self):
+        """WSD13 — `SMPL-482-x` with `run.json.ticket` `SMPL-483`, `me/SMPL-483/x` at main and `me/SMPL-482/x` unmerged, the worktree gone: awaiting acceptance — a session names another ticket's merged branch and its own work reads as landed."""
+        self.given_declared_repo(merged=False, unit="SMPL-483")
+        self.given_branch_at_main(self.repo, "me/SMPL-483/x")
+        self.given_shaped_session(self.gone_place(), ticket="SMPL-483")
+
+        self.assert_unit_reads("awaiting acceptance")
+
+    # ------------------------------------------------------------ the declared base is main
+
+    def test_reads_a_declared_session_complete__when_its_branch_is_in_its_declared_base_and_origin_head_names_another_branch(self):
+        """WSD14 — `origin/HEAD` naming `develop` (a local branch behind main), `base` `main`, the worktree at its place on `me/SMPL-482/x` merged into main: complete — the declared base is ignored and an accepted session waits on `develop`."""
+        self.given_declared_repo(merged=True)
+        self.git(self.repo, "branch", "develop", "main~1")
+        self.git(self.repo, "update-ref", "refs/remotes/origin/develop", "main~1")
+        self.git(self.repo, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/develop")
+        self.given_shaped_session(self.given_worktree_at_its_place())
+
+        self.assert_unit_reads("complete")
+
+    def test_reads_a_declared_session_awaiting_acceptance__when_a_tag_shares_its_declared_base_name_at_its_unmerged_branch(self):
+        """WSD18 — `base` `main`, a tag `main` at `me/SMPL-482/x`'s tip, the branch unmerged into the branch `main`, the worktree at its place: awaiting acceptance — git reads a bare `main` as the tag, so unaccepted work reads complete."""
+        self.given_declared_repo(merged=False)
+        self.git(self.repo, "tag", "main", SHAPED_BRANCH)
+        self.given_shaped_session(self.given_worktree_at_its_place())
+
+        self.assert_unit_reads("awaiting acceptance")
+
+
+class DeclaredShapeDirectBuild(DashScratch):
+    """WSD — a direct build `sample-001-first` of a declared repository: launch.json's `worktrees` entry for the scratch
+    repository has root `<scratch>/worktrees`, branch `me/{session}`, base `main`; the build's worktree is at
+    `<scratch>/worktrees/sample-001-first` on `me/sample-001-first`, one commit ahead of main; its change description
+    is written and no session is live."""
+
+    given_change_description = InMainTruth.given_change_description
+    assert_unit_reads = InMainTruth.assert_unit_reads
+    given_record = DirectAccept.given_record
+    rev = DirectAccept.rev
+
+    def given_declared_direct_build(self):
+        self.sessions.mkdir(parents=True, exist_ok=True)
+        self.projects.mkdir(parents=True, exist_ok=True)
+        self.folder = self.given_project()
+        self.repo = self.given_repo(DIRECT_BRANCH, merged=False)
+        root = self.base / "worktrees"
+        root.mkdir()
+        self.given_settings(self.folder, "robowright.json", {"repos": [{"name": "sample", "path": str(self.repo)}]})
+        self.given_launch_settings(sessions_root=str(self.sessions), projects_root=str(self.projects),
+                                   repos=[str(self.repo)],
+                                   worktrees={str(self.repo): {"root": str(root), "branch": "me/{session}", "base": "main"}})
+        self.worktree = root / SLUG
+        self.git(self.repo, "worktree", "add", "-q", str(self.worktree), DIRECT_BRANCH)
+        self.given_change_description()
+
+    def test_reads_a_declared_direct_build_working__when_its_worktree_on_its_shape_branch_holds_uncommitted_work(self):
+        """WSD15 — the build's worktree on `me/sample-001-first` holds an uncommitted file: working — a direct build's worktree found only by `robowright/<slug>` is never checked for work it has not committed."""
+        self.given_declared_direct_build()
+        (self.worktree / "unfinished.txt").write_text("not committed yet\n")
+
+        self.assert_unit_reads("working")
+
+    def test_reads_a_declared_direct_build_with_the_lead__when_its_accept_record_names_a_commit_on_main_that_is_not_its_shape_branchs_change(self):
+        """WSD16 — main moved and then took a pick of `me/sample-001-first`; `ACCEPTED.json` names main's commit before the pick while the branch still exists: with the Lead — a record checked against `robowright/<slug>` alone reads any commit on main as the accept."""
+        self.given_declared_direct_build()
+        (self.repo / "CHANGELOG.md").write_text("main moves on\n")
+        self.git(self.repo, "add", "CHANGELOG.md")
+        self.git(self.repo, "commit", "-q", "-m", "main moves on")
+        self.git(self.repo, "cherry-pick", DIRECT_BRANCH)
+        self.given_record(self.rev("rev-parse", "main~1"))
+
+        self.assert_unit_reads("with the Lead")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -500,9 +500,10 @@ The Planner has written `BRIEF.md` and `run.json` into the session directory (pr
 the worktree lives in `robowright.json.repos[<run.json.repo>].path`, per that repo's hook
 → Worktree. **Never run `git worktree add` for a launched Worker, and never hand the Owner that line:** the Lead's
 sandbox cannot write a repository's git directory (SECURITY.md → What each role can write), and the launcher makes a
-missing worktree itself, as the Owner, on the launch after the dry run. It makes one only at
-`<repo>/.worktrees/<session dir name>` on `robowright/<session dir name>`, from `run.json.base_sha` at preflight;
-a refusal naming that convention, the branch or `base_sha` goes back to the Planner as a `run.json` fix. A
+missing worktree itself, as the Owner, on the launch after the dry run. It makes one only at the repository's shape
+(`launch.json` → `worktrees`; with no entry `<repo>/.worktrees/<session dir name>` on `robowright/<session dir name>`),
+from `run.json.base_sha` at preflight; a refusal naming the shape, the branch or `base_sha` goes back to the Planner
+as a `run.json` fix. A
 `run.json.repo` that names no `repos` entry is refused: ask the Planner, never fall
 back to a single repo. A standalone brief (a work order, or any brief with no project
 `robowright.json`) keeps the old shape: the worktree is the brief's `worktree` row, made the same way, and `repo` is

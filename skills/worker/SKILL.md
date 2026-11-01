@@ -117,7 +117,7 @@ Only the first ~5k tokens of this file survive compaction. These eight rules are
    each at handoff — including when the Robowright Session stops early or fails. Remove each
    `deps/<session>` checkout (Phase 0 step 7a) at the same points, never with `--force`; never
    edit, build or commit inside one. Touch only branches this Robowright Session
-   created: `robowright/<slug>`, and `robowright/<slug>-u<N>` for unit N of a stack.
+   created: the session's branch, and `<branch>-u<N>` for unit N of a stack.
    **Every write to the git directory goes through `rw-git`** — stage, unstage, commit, amend,
    switch, reset, rebase, cherry-pick, stash, fetch, push (`rw-git --help`). Your sandbox denies the git
    directory, and rw-git runs outside it, refusing any branch but yours. In your managed worktree
@@ -318,7 +318,7 @@ For each unit in order. A unit is one reviewable change in a stack, or a commit 
 single change.
 
 1. **Branch.** Apply `state unit-start` (refused while an earlier unit is open). `rw-git switch
-   -c robowright/<slug>-u<N>` from the predecessor unit's head (stack) or continue on the
+   -c <branch>-u<N>` (the session's branch, `robowright/<slug>` by default) from the predecessor unit's head (stack) or continue on the
    session's branch (single change). Record `units[i].branch`.
 2. **Spec first, then implement.** A `behavior` unit — and a `ui` unit whose acceptance checks
    name logic — gets its expected values before it gets code, from someone who will not write

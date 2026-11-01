@@ -3197,5 +3197,363 @@ class ExplicitWorktreeTests(RwGitCase):
             self.assertIn(words, out)
 
 
+# -- A declared worktree shape (WS rows, BEHAVIORS.md) ---------------------------------------------------------------
+# The fixture: session SMPL-482-x, sample's entry {root <root>/worktrees, branch
+# me/{ticket}/{slug}, base main}, and the unit block below. Every row drives the rw-git CLI end to end.
+
+SHAPE_SESSION = "SMPL-482-x"
+SHAPE_BRANCH = "me/SMPL-482/x"
+OTHER_SHAPE_BRANCH = "me/SMPL-483/y"
+SHAPE_UNIT = {
+    "ticket_regex": "^SMPL-[0-9]+$",
+    "ticket_example": "SMPL-482",
+    "slug_regex": "^[a-z0-9]+(-[a-z0-9]+)*$",
+    "slug_example": "export-csv",
+}
+NO_TICKET_UNIT = dict(SHAPE_UNIT, ticket_regex=None, ticket_example=None)
+ENTRY_REFUSAL = "`worktrees` entry for"
+NOT_TICKET_SLUG = "is not <ticket>-<slug> on this install"
+
+
+class DeclaredShapeCase(RwGitCase):
+    """sample declares its worktree shape; its worktree <root>/worktrees/SMPL-482-x is on me/SMPL-482/x, with the
+    session folder <sessions_root>/SMPL-482-x/. given_launch_json replaces the whole file, so every config here carries
+    `repos`, the roots and `unit` beside `worktrees`. The suite's convention worktree, <repo>/.worktrees/sample-001-x,
+    stays."""
+
+    def setUp(self):
+        super().setUp()
+        self.worktrees = self.root / "worktrees"
+        self.declared = self.given_worktree(self.repo, self.worktrees / SHAPE_SESSION, SHAPE_BRANCH)
+        self.shape_session = self.given_session(SHAPE_SESSION)
+        self.given_shape_config({str(self.repo): self.entry()})
+
+    def entry(self, **changes):
+        """sample's `worktrees` entry: the brief's values, with `changes` over them."""
+        return {"root": str(self.worktrees), "branch": "me/{ticket}/{slug}", "base": "main", **changes}
+
+    def given_shape_config(self, worktrees, unit=SHAPE_UNIT, repos=()):
+        """launch.json whole: sample and `repos`, the roots, `unit`, and `worktrees` unless it is None."""
+        config = {"repos": [str(self.repo), *(str(repo) for repo in repos)], "sessions_root": str(self.sessions),
+                  "projects_root": str(self.projects), "unit": unit}
+        if worktrees is not None:
+            config["worktrees"] = worktrees
+        self.given_launch_json(config)
+
+    def given_staged(self, where):
+        (where / "f").write_text("x\n")
+        self.git(where, "add", "f")
+
+    def has_branch(self, name):
+        return self.git(self.repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}", check=False) != ""
+
+    def refused_by_name(self, words, *args, cwd):
+        """exit 2, `refused:`, and `words` in the refusal, whichever code names it."""
+        code, _, err = self.rw(*args, cwd=cwd)
+        self.assertEqual(code, 2, f"rw-git {args}: exit {code}: {err}")
+        self.assertIn("refused: ", err)
+        self.assertIn(words, err)
+        return err
+
+
+class DeclaredShapeTests(DeclaredShapeCase):
+    """A worktree directly in a declared repository's root is managed on the shape's branch."""
+
+    def test_where__a_worktree_in_the_declared_root_is_managed_and_named_for_its_folder(self):
+        """WS1 · `where` in <root>/worktrees/SMPL-482-x: `kind: managed SMPL-482-x`, `head: me/SMPL-482/x` — read as
+        unmanaged, a declared-shape Worker writes any unprotected branch."""
+        out = self.ok("where", cwd=self.declared)
+
+        self.assertIn(f"kind: managed {SHAPE_SESSION}", out.splitlines())
+        self.assertIn(f"head: {SHAPE_BRANCH}", out.splitlines())
+
+    def test_commit__on_the_shapes_branch_with_a_message_from_its_own_session_folder(self):
+        """WS2 · on me/SMPL-482/x, the message under <sessions_root>/SMPL-482-x/: a commit on that branch — else a
+        declared-shape Worker cannot commit with its own session folder's message."""
+        self.given_staged(self.declared)
+        before = self.head(self.declared)
+
+        self.ok("commit", "--message-file", str(self.given_message(folder=self.shape_session)), cwd=self.declared)
+
+        self.assertEqual(self.git(self.declared, "rev-parse", "HEAD~1"), before)
+        self.assertEqual(self.branch(self.declared), SHAPE_BRANCH)
+        self.assertEqual(self.git(self.declared, "log", "-1", "--format=%s"), "sample: a change")
+
+    def test_switch__create_makes_unit_ns_branch_beside_the_shapes(self):
+        """WS3 · `switch -c me/SMPL-482/x-u2`: exit 0, on it — else unit 2 of a declared-shape session has no
+        branch."""
+        self.ok("switch", "-c", f"{SHAPE_BRANCH}-u2", cwd=self.declared)
+
+        self.assertEqual(self.branch(self.declared), f"{SHAPE_BRANCH}-u2")
+
+    def test_commit__refused_on_another_sessions_branch_naming_its_own(self):
+        """WS4 · HEAD on me/SMPL-483/y: commit is head-not-own naming me/SMPL-482/x, HEAD stays — else one session
+        writes another's branch."""
+        self.git(self.declared, "switch", "-q", "-c", OTHER_SHAPE_BRANCH)
+        self.given_staged(self.declared)
+        before = self.head(self.declared)
+
+        err = self.refused("head-not-own", "commit", "--message-file",
+                           str(self.given_message(folder=self.shape_session)), cwd=self.declared)
+
+        self.assertIn(SHAPE_BRANCH, err)
+        self.assertEqual(self.head(self.declared), before)
+
+    def test_switch__create_refuses_another_sessions_branch_naming_its_own(self):
+        """WS5 · `switch -c me/SMPL-483/y`: branch-not-own naming me/SMPL-482/x, no branch made — else one session
+        makes another's branch."""
+        err = self.refused("branch-not-own", "switch", "-c", OTHER_SHAPE_BRANCH, cwd=self.declared)
+
+        self.assertIn(SHAPE_BRANCH, err)
+        self.assertFalse(self.has_branch(OTHER_SHAPE_BRANCH))
+        self.assertEqual(self.branch(self.declared), SHAPE_BRANCH)
+
+    def test_switch__create_refuses_a_name_only_near_the_shapes_branch(self):
+        """WS6 · the convention's robowright/SMPL-482-x, me/SMPL-482/xy, me/SMPL-482/x-u: branch-not-own each, none
+        made — a prefix match or the convention's branch would let the session name a branch the shape never
+        derives."""
+        for name in ("robowright/SMPL-482-x", "me/SMPL-482/xy", "me/SMPL-482/x-u"):
+            with self.subTest(branch=name):
+                self.refused("branch-not-own", "switch", "-c", name, cwd=self.declared)
+
+                self.assertFalse(self.has_branch(name))
+                self.assertEqual(self.branch(self.declared), SHAPE_BRANCH)
+
+    def test_commit__refuses_a_message_outside_its_own_session_folder(self):
+        """WS7 · a message under the temp folder, then under <sessions_root>/sample-001-x/: message-file each, HEAD
+        stays — else a managed worktree reads a message from a folder that is not its session's."""
+        self.given_staged(self.declared)
+        before = self.head(self.declared)
+        for message in (self.given_message(folder=self.root / "temp" / "declared"), self.given_message()):
+            with self.subTest(message=str(message)):
+                self.refused("message-file", "commit", "--message-file", str(message), cwd=self.declared)
+
+                self.assertEqual(self.head(self.declared), before)
+
+    def test_where__a_worktree_one_level_below_the_root_is_unmanaged(self):
+        """WS12 · <root>/worktrees/nested/SMPL-483-y: `kind: unmanaged` — the worktree is <root>/<session>, never
+        anywhere under the root."""
+        nested = self.given_worktree(self.repo, self.worktrees / "nested" / "SMPL-483-y", PERSON_BRANCH)
+
+        out = self.ok("where", cwd=nested)
+
+        self.assertIn("kind: unmanaged", out.splitlines())
+
+    def test_where__a_main_checkout_directly_in_its_own_declared_root_is_unmanaged(self):
+        """WS26 · `root` the main checkout's parent folder: `where` in the main checkout is `kind: unmanaged`, for a
+        branch naming {ticket}/{slug} and one naming {session} — a main checkout is never a managed worktree (gate F2)."""
+        for branch in ("me/{ticket}/{slug}", "me/{session}"):
+            with self.subTest(branch=branch):
+                self.given_shape_config({str(self.repo): self.entry(root=str(self.repo.parent), branch=branch)})
+
+                out = self.ok("where", cwd=self.repo)
+
+                self.assertIn("kind: unmanaged", out.splitlines())
+
+    def test_where__a_declared_repositorys_convention_worktree_is_unmanaged(self):
+        """WS13 · <repo>/.worktrees/sample-001-x of a declared repository: `kind: unmanaged` — the declaration is the
+        repository's one shape, so the convention's place is no shape of it (assumed Q1)."""
+        out = self.ok("where", cwd=self.worktree)
+
+        self.assertIn("kind: unmanaged", out.splitlines())
+
+    def test_add__ticket_and_slug_on_an_install_with_no_ticket_regex_are_refused_by_name(self):
+        """WS19 · `unit` with no ticket_regex, branch me/{ticket}/{slug}: `add f` refused with "is not <ticket>-<slug>
+        on this install", nothing staged — else {ticket} would be filled from somewhere other than the folder name."""
+        self.given_shape_config({str(self.repo): self.entry()}, unit=NO_TICKET_UNIT)
+        (self.declared / "f").write_text("x\n")
+
+        self.refused_by_name(NOT_TICKET_SLUG, "add", "f", cwd=self.declared)
+
+        self.assertEqual(self.staged(self.declared), [])
+
+    def test_add__a_folder_name_the_split_does_not_fit_is_refused_by_name(self):
+        """WS20 · <root>/worktrees/SMPL482 with ticket_regex set: `add f` refused with "is not <ticket>-<slug> on this
+        install", nothing staged — else a name with no ticket is served on a branch it cannot fill."""
+        unsplit = self.given_worktree(self.repo, self.worktrees / "SMPL482", PERSON_BRANCH)
+        (unsplit / "f").write_text("x\n")
+
+        self.refused_by_name(NOT_TICKET_SLUG, "add", "f", cwd=unsplit)
+
+        self.assertEqual(self.staged(unsplit), [])
+
+    def test_commit__a_session_only_branch_serves_on_an_install_with_no_ticket_regex(self):
+        """WS21 · `unit` with no ticket_regex, branch me/{session}, HEAD on me/SMPL-482-x: commit with the session
+        folder's message, exit 0 — {session} alone works on any install."""
+        self.given_shape_config({str(self.repo): self.entry(branch="me/{session}")}, unit=NO_TICKET_UNIT)
+        self.git(self.declared, "switch", "-q", "-c", "me/SMPL-482-x")
+        self.given_staged(self.declared)
+        before = self.head(self.declared)
+
+        self.ok("commit", "--message-file", str(self.given_message(folder=self.shape_session)), cwd=self.declared)
+
+        self.assertEqual(self.git(self.declared, "rev-parse", "HEAD~1"), before)
+        self.assertEqual(self.branch(self.declared), "me/SMPL-482-x")
+
+    def test_help__says_a_managed_worktree_is_at_the_repositorys_shape(self):
+        """WS24 · `rw-git --help` says "the repository's shape" — else a session learns only <repo>/.worktrees."""
+        out = self.ok("--help", cwd=self.root)
+
+        self.assertIn("the repository's shape", " ".join(out.split()))
+
+
+class UndeclaredShapeTests(DeclaredShapeCase):
+    """WS8-WS11: the same worktree with sample's entry removed is an unmanaged checkout, as today."""
+
+    def setUp(self):
+        super().setUp()
+        self.given_shape_config(None)
+
+    def test_where__the_worktree_is_unmanaged_once_the_entry_is_removed(self):
+        """WS8 · no `worktrees`: `where` in <root>/worktrees/SMPL-482-x is `kind: unmanaged`."""
+        out = self.ok("where", cwd=self.declared)
+
+        self.assertIn("kind: unmanaged", out.splitlines())
+
+    def test_commit__on_its_branch_with_a_message_from_the_temp_folder_once_the_entry_is_removed(self):
+        """WS9 · no `worktrees`, a message under the temp folder: commit exit 0 on me/SMPL-482/x — today's unmanaged
+        rule."""
+        self.given_staged(self.declared)
+        before = self.head(self.declared)
+
+        self.ok("commit", "--message-file", str(self.given_message(folder=self.root / "temp" / "declared")),
+                cwd=self.declared)
+
+        self.assertEqual(self.git(self.declared, "rev-parse", "HEAD~1"), before)
+        self.assertEqual(self.branch(self.declared), SHAPE_BRANCH)
+
+    def test_switch__create_makes_any_unprotected_branch_once_the_entry_is_removed(self):
+        """WS10 · no `worktrees`: `switch -c topic/sample` exit 0 — today's unmanaged rule."""
+        self.ok("switch", "-c", PERSON_BRANCH, cwd=self.declared)
+
+        self.assertEqual(self.branch(self.declared), PERSON_BRANCH)
+
+    def test_commit__refuses_a_message_from_its_session_folder_once_the_entry_is_removed(self):
+        """WS11 · no `worktrees`, the message under <sessions_root>/SMPL-482-x/: message-file, HEAD stays — an
+        unmanaged checkout gains no session's message rule."""
+        self.given_staged(self.declared)
+        before = self.head(self.declared)
+
+        self.refused("message-file", "commit", "--message-file", str(self.given_message(folder=self.shape_session)),
+                     cwd=self.declared)
+
+        self.assertEqual(self.head(self.declared), before)
+
+    def test_where__a_convention_worktree_whose_name_is_no_branch_is_still_managed(self):
+        """WS27 · no `worktrees`, <repo>/.worktrees/v1..2: `kind: managed v1..2` as before the shape — the convention's
+        branch is not held to git's ref rules, so no declaration means no new refusal (gate F3)."""
+        odd = self.given_worktree(self.repo, Path(".worktrees") / "v1..2", PERSON_BRANCH)
+
+        out = self.ok("where", cwd=odd)
+
+        self.assertIn("kind: managed v1..2", out.splitlines())
+
+
+class MalformedShapeTests(DeclaredShapeCase):
+    """WS14-WS18: an entry out of shape refuses its own repository by name; `worktrees` out of shape, every one."""
+
+    def setUp(self):
+        super().setUp()
+        self.other = self.given_repo(self.root / "repos" / "other")
+
+    def test_add__a_malformed_entry_refuses_its_worktree_naming_the_repository(self):
+        """WS14 · each malformed entry (keys, placeholders, base, root): `add f` in <root>/worktrees/SMPL-482-x is
+        launch-config naming sample and "`worktrees` entry for", nothing staged — else a worktree is served on a
+        shape the Owner's config does not hold."""
+        link = self.root / "wt-link"
+        link.symlink_to(self.worktrees)
+        cases = (("missing branch", {"root": str(self.worktrees), "base": "main"}),
+                 ("a dir key", self.entry(dir="{ticket}-{slug}")),
+                 ("a placeholder outside the set", self.entry(branch="me/{unit}/{slug}")),
+                 ("a branch naming neither session nor slug", self.entry(branch="me/fixed")),
+                 ("a base that is no text", self.entry(base=7)),
+                 ("a root under the sessions root", self.entry(root=str(self.sessions / "wt"))),
+                 ("the main checkout as root", self.entry(root=str(self.repo))),
+                 ("a root inside another listed repository", self.entry(root=str(self.other / "wt"))),
+                 ("a root through a link", self.entry(root=str(link))))
+        (self.declared / "f").write_text("x\n")
+        for name, entry in cases:
+            with self.subTest(entry=name):
+                self.given_shape_config({str(self.repo): entry}, repos=(self.other,))
+
+                err = self.refused("launch-config", "add", "f", cwd=self.declared)
+
+                self.assertIn(ENTRY_REFUSAL, err)
+                self.assertIn(str(self.repo), err)
+                self.assertEqual(self.staged(self.declared), [])
+
+    def test_add__a_malformed_entry_refuses_the_repositorys_other_checkouts_too(self):
+        """WS15 · sample's entry missing `branch`: `add f` in the main checkout and in <repo>/.worktrees/sample-001-x
+        is launch-config naming sample, nothing staged — a malformed entry refuses that repository, not one place."""
+        self.given_shape_config({str(self.repo): {"root": str(self.worktrees), "base": "main"}}, repos=(self.other,))
+        for where in (self.repo, self.worktree):
+            with self.subTest(where=str(where)):
+                (where / "f").write_text("x\n")
+
+                err = self.refused("launch-config", "add", "f", cwd=where)
+
+                self.assertIn(ENTRY_REFUSAL, err)
+                self.assertIn(str(self.repo), err)
+                self.assertEqual(self.staged(where), [])
+
+    def test_add__another_repository_is_untouched_by_a_malformed_entry(self):
+        """WS16 · sample's entry missing `branch`, `other` listed with none: `add f` in other's main checkout exit
+        0 — one repository's bad entry must not stop another's work."""
+        self.given_shape_config({str(self.repo): {"root": str(self.worktrees), "base": "main"}}, repos=(self.other,))
+        (self.other / "f").write_text("x\n")
+
+        self.ok("add", "f", cwd=self.other)
+
+        self.assertEqual(self.staged(self.other), ["f"])
+
+    def test_add__worktrees_out_of_shape_refuses_every_repository(self):
+        """WS17 · `worktrees` a list, then keyed by a relative path: `add f` in other's main checkout is launch-config
+        naming `worktrees`, nothing staged — Owner config out of shape is refused, never skipped."""
+        (self.other / "f").write_text("x\n")
+        for name, worktrees in (("a list", [str(self.repo)]), ("a relative key", {"repos/sample": self.entry()})):
+            with self.subTest(worktrees=name):
+                self.given_shape_config(worktrees, repos=(self.other,))
+
+                err = self.refused("launch-config", "add", "f", cwd=self.other)
+
+                self.assertIn("`worktrees`", err)
+                self.assertEqual(self.staged(self.other), [])
+
+    def test_where__an_entry_for_a_path_repos_does_not_list_is_unused(self):
+        """WS18 · `worktrees` keys <root>/repos/absent to {"dir": "x"}: <repo>/.worktrees/sample-001-x is still
+        `kind: managed sample-001-x` — an entry is read only for the repository it names."""
+        self.given_shape_config({str(self.root / "repos" / "absent"): {"dir": "x"}})
+
+        out = self.ok("where", cwd=self.worktree)
+
+        self.assertIn(f"kind: managed {SLUG}", out.splitlines())
+
+
+class SharedRootTests(DeclaredShapeCase):
+    """WS22-WS23: sample and other declare one root; sample's worktree there is held to sample's shape (assumed Q3)."""
+
+    def setUp(self):
+        super().setUp()
+        self.other = self.given_repo(self.root / "repos" / "other")
+        self.given_shape_config({str(self.repo): self.entry(),
+                                 str(self.other): {"root": str(self.worktrees), "branch": "theirs/{session}"}},
+                                repos=(self.other,))
+
+    def test_switch__create_refuses_the_other_repositorys_branch_in_a_shared_root(self):
+        """WS22 · `switch -c theirs/SMPL-482-x`: branch-not-own naming me/SMPL-482/x, none made — else the other
+        repository's shape decides what sample's worktree writes (assumed Q3)."""
+        err = self.refused("branch-not-own", "switch", "-c", "theirs/SMPL-482-x", cwd=self.declared)
+
+        self.assertIn(SHAPE_BRANCH, err)
+        self.assertFalse(self.has_branch("theirs/SMPL-482-x"))
+
+    def test_switch__create_makes_its_own_unit_branch_in_a_shared_root(self):
+        """WS23 · `switch -c me/SMPL-482/x-u2`: exit 0 — the worktree's own git directory names its repository, so a
+        shared root is no reason to refuse it (assumed Q3)."""
+        self.ok("switch", "-c", f"{SHAPE_BRANCH}-u2", cwd=self.declared)
+
+        self.assertEqual(self.branch(self.declared), f"{SHAPE_BRANCH}-u2")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -507,3 +507,20 @@ admission is unchanged, so it was green before and after. It catches that admiss
 | OLD-1 | `convention_repo` takes `<repo>/.claude/worktrees/<slug>` again | WT-10 | same | KILLED |
 | OLD-2 | `direct_worktree` takes the old place when nothing is at the convention path | DL-7 | same | KILLED; run with OLD-1, kill sets disjoint |
 | OLD-3 | the existing-worktree shape check admits `*/.worktrees/*` only | WT-16 and every row on the `<root>/worktrees/wt` fixture | WT-16 and 69 others | KILLED |
+
+## worktree-shape-001-declared-shape · the declared worktree shape (DS-1 to DS-45)
+
+Every DS test but six was red against a skeleton of `names_of`, `shape_of` and `place_of` that returned constants. The
+six green there (DS-3, DS-20, DS-22, DS-24, DS-33, DS-34) each owed a mutation; two rounds, kill sets predicted first.
+
+| # | Mutation | Predicted to fail | Observed | Verdict |
+|---|---|---|---|---|
+| DS-M1 | `owned_root` skips `unlinked` on a declared root | DS-3 [the root a link to elsewhere] | same | KILLED |
+| DS-M2 | `located_repo` re-raises an entry refusal instead of skipping that repository | DS-20 | same | KILLED |
+| DS-M3 | `place_of` drops the `check-ref-format --branch` check | DS-24 | same | KILLED |
+| DS-M4 | `in_unit_form` drops its `TICKET_FORM` line | DS-34 [-482] | same | KILLED; run with DS-M1 to M3, kill sets disjoint |
+| DS-M5 | `shape_of` validates every entry, matched or not | DS-22, DS-20 | same | KILLED |
+| DS-M6 | `in_unit_form` drops the whole-`slug_regex` accept | DS-33 [export-csv], DS-31 | same | KILLED; run with DS-M5 |
+
+DS-45 [two repositories' shapes share a place] was added for a gate finding and seen red on the tree before its fix
+(`launch: ok (briefed)`, `FAILED (failures=1)`); that baseline is its kill.

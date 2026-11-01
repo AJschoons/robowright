@@ -1,0 +1,32 @@
+{
+  "about": "The shared vector of session directory names (DS-33 to DS-37 in BEHAVIORS.md): the launcher's in_unit_form and role_grants.names_of read this one list under this one unit block and must give each name the verdict below. split is [ticket, slug] for a <ticket>-<slug> name, \"whole\" for a name slug_regex matches whole (accepted with no split), null for a rejected name. Each verdict is in_unit_form's reading: TICKET_FORM first, then slug_regex whole, then the first hyphen from the left whose halves match ticket_regex and slug_regex, every pattern read as POSIX ERE.",
+  "unit": {
+    "ticket_regex": "^(SMPL|smpl)-[0-9]+(-[0-9]+)?$",
+    "ticket_example": "SMPL-482",
+    "slug_regex": "^[a-z0-9]+(-[a-z0-9]+)*$|^[[:digit:]-]+$",
+    "slug_example": "export-csv",
+    "group_regex": "^([A-Z][A-Z0-9]*)-[0-9]+(-[a-z0-9]+)*$"
+  },
+  "names": [
+    {"name": "SMPL-482-x", "verdict": "accept", "split": ["SMPL-482", "x"],
+     "why": "the first hyphen leaves SMPL, which ticket_regex refuses; the second gives SMPL-482 and x"},
+    {"name": "SMPL-482-7-x", "verdict": "accept", "split": ["SMPL-482", "7-x"],
+     "why": "the second and the third hyphen both give halves the two patterns accept; the first from the left wins"},
+    {"name": "smpl-482-x", "verdict": "accept", "split": "whole",
+     "why": "slug_regex matches the whole name, so it is accepted before any split, though smpl-482 and x would split"},
+    {"name": "export-csv", "verdict": "accept", "split": "whole",
+     "why": "slug_regex matches the whole name"},
+    {"name": "SMPL-482-7--8", "verdict": "accept", "split": ["SMPL-482", "7--8"],
+     "why": "only the bracket expression [[:digit:]-] accepts 7--8: POSIX ERE reads it as a digit or a hyphen, Python re as a set of '[', ':', 'd', 'i', 'g', 't' followed by the literal text '-]'"},
+    {"name": "-482", "verdict": "reject", "split": null,
+     "why": "TICKET_FORM refuses a leading hyphen before slug_regex, whose second branch would accept it, is read"},
+    {"name": "SMPL482", "verdict": "reject", "split": null,
+     "why": "no hyphen to split at, and slug_regex refuses the whole name"},
+    {"name": "SMPL-x", "verdict": "reject", "split": null,
+     "why": "the only hyphen leaves SMPL, which ticket_regex refuses"},
+    {"name": "SMPL-482-", "verdict": "reject", "split": null,
+     "why": "the last hyphen leaves an empty slug, which slug_regex refuses"},
+    {"name": "SMPL-482-X", "verdict": "reject", "split": null,
+     "why": "the slug half X is upper case, which slug_regex refuses"}
+  ]
+}
