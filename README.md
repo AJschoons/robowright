@@ -7,15 +7,12 @@
 
 <p align="center"><b>Hand Claude Code a whole stack of changes. Come back to finished, reviewed work.</b></p>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/hero-dark.svg">
-  <img src="assets/hero-light.svg" alt="A blueprint: the Owner and the Robowright crew turning one brief into a three-storey building of work units.">
-</picture>
+<a href="https://robowright.dev"><img src="assets/readme-demo.gif" alt="A looping blueprint animation: a Reviewer robot climbs a ladder to inspect the second floor of a building, stamps HOLD, the Worker fixes it, and a fresh inspection stamps ADVANCE."></a>
 
 <details>
-<summary>What the picture shows</summary>
+<summary>What the animation shows</summary>
 
-A blueprint, left to right. The Owner, a person in a hard hat with a light bulb overhead, and the Planner robot go back and forth, shown as a cycle of two arrows, and a sheet goes from the Planner to a three-storey building marked one brief, with the Lead robot above it. Each floor is a work unit: the first has a check mark in its front door, two Worker robots build the second, the third is still dashed, and the chain of units runs on to etc. The Reader robot is on a ladder level with the Workers, and the Reviewer robot is on a second ladder, at the line between the second and third floors. Along the bottom, a line labelled owner reviews and merges, or replans, runs from the Explainer robot on the right back to the Owner, under two record sheets.
+The inspection from robowright.dev. A Worker is building unit 2 of a three-unit project. Before the unit can close, a Reviewer that never saw it being written climbs up to inspect it and holds it with a finding. One fix, then a fresh inspection, and the unit is signed off with the finding on file. The full story is at robowright.dev.
 
 </details>
 
@@ -41,7 +38,7 @@ tool, or a CI system.
 
 ## The crew
 
-The roles are a building crew, numbered as in the drawing above. The five-minute tour is
+The roles are a building crew. The five-minute tour is
 `skills/robowright/README.md`; the as-built map is `skills/robowright/ARCHITECTURE.md`.
 
 | | Role |
@@ -121,7 +118,7 @@ use a second clone. `SECURITY.md` → The recommended setup has the rest, step b
 | `examples/` | Two example machine profiles: `laptop` (a subscription) and `desktop` (an API key) | No |
 | `tests/` | `run.sh`, which runs every suite and the whole-tree scrub check, and the suites that do not sit beside a script | No |
 | `tools/` | The scrub gate and the git hooks that run it, and `robowright-dash.py`, the read-only dashboard, run from the clone | No |
-| `assets/` | The logo, the hero, the role glyphs and the dashboard screenshots this page shows | No |
+| `assets/` | The logo, the inspection loop, the role glyphs and the dashboard screenshots this page shows, and the hero drawing the site shares | No |
 | `MANUAL.md` | The operating manual: the commands for running a project, task by task | No |
 | `.claude/robowright/project.md` | This repository's own project hook | No |
 
