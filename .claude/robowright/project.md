@@ -212,7 +212,7 @@ brief in the project folder's owner-brief directory.**
 behind local `main` is rebased first; the script squashes it onto local `main`, fast-forwards, and prints the
 worktree teardown, which is the Owner's too. **The Owner pushes.** No role does.
 
-accept: ~/.claude/skills/lead/scripts/accept.sh --tip <tip> --message <session_dir>/prs/<unit>/commit-message.txt <session_dir> — the Owner runs it, `<tip>` the full id of the branch tip that was reviewed
+accept: ~/.claude/skills/lead/scripts/accept.sh -S --tip <tip> --message <session_dir>/prs/<unit>/commit-message.txt <session_dir> — the Owner runs it, `<tip>` the full id of the branch tip that was reviewed
 
 A direct build has no session directory. Its change description is `<project_dir>/prs/<unit>.md`, its squash message
 `<project_dir>/prs/<unit>/commit-message.txt`, and it is accepted with
