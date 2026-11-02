@@ -524,3 +524,52 @@ six green there (DS-3, DS-20, DS-22, DS-24, DS-33, DS-34) each owed a mutation; 
 
 DS-45 [two repositories' shapes share a place] was added for a gate finding and seen red on the tree before its fix
 (`launch: ok (briefed)`, `FAILED (failures=1)`); that baseline is its kill.
+
+
+## A shared root (worktree-shape-002 U1)
+
+DS-45 (rewritten) and DS-46 to DS-56 were red against the base before the tie-break existed (`FAILED (failures=16)`,
+every one an assertion); DS-52 and DS-57 were green there and owed a mutation. Three rounds over `role_grants.py`, the
+kill set predicted in writing before each, the file restored after each (`git status --short` empty).
+
+| # | Mutation | Predicted to fail | Observed | Verdict |
+|---|---|---|---|---|
+| SR-M1 | `chosen` returns the first match when there are several | DS-50 | DS-50 | KILLED |
+| SR-M4 | `chosen` compares basenames ignoring case (run with SR-M1) | DS-49 [other letter case] | DS-49 [other letter case], DS-49 [robowright.json's name] | KILLED; wrong prediction: the letter-case subtest made the worktree, and the next subtest of the same method found it on disk |
+| SR-M5 | `shaped` skips the check that the chosen repository lists the worktree | DS-54 | DS-54 | KILLED |
+| SR-M2 | `chosen` returns the first candidate when `repo` is missing | DS-45, DS-51 ×4 | the same | KILLED |
+| SR-M3 | `located_repo` returns the last candidate's entry, not the chosen one's | DS-48 | DS-48 (refused on `units[0].branch`) | KILLED |
+| SR-M6 | `shaped` refuses every shared root, as before the tie-break | DS-53, DS-54, DS-55 | those and DS-46, DS-47 | KILLED; wrong prediction: the late check runs on every launch after the make, not only on a resume |
+| SR-M8 | `chosen` returns the first candidate when no basename matches (run with SR-M2, M3, M6) | DS-49 ×3, DS-56 | the same | KILLED |
+| SR-M9 | `chosen` reads `repo` with one candidate too | DS-52 [not a string], [absent], every one-candidate DS row with no `repo` | the same; DS-52 [a repository that is no candidate] green | KILLED |
+| SR-M10 | `declared_shape` refuses an entry whose `root` another entry declares (run with SR-M9) | DS-57, DS-45 to DS-51, DS-53 to DS-56 | the same; DS-57 as an error, `shape_of` raising the refusal its Then rules out | KILLED |
+
+
+## Nested roots (worktree-shape-002 U2)
+
+DS-58 to DS-61, DS-63, DS-66, DS-67 and DS-69 to DS-71 were red before the nesting check existed (every failure an
+assertion); DS-62, DS-64, DS-65 and DS-68 were green there and owed a mutation. DS-72 was added during the mutation
+rounds (below) and has no red baseline. Four rounds over `role_grants.py`. Each round's kill set was predicted in
+writing first, the scoped DS rows plus DS-46 and DS-57 were run, and the file was restored afterwards.
+
+| # | Mutation | Predicted to fail | Observed | Verdict |
+|---|---|---|---|---|
+| NR-M5 | `same_root` compares spellings only (no `identity`) | DS-66 | DS-66 | KILLED |
+| NR-M10 | `strictly_inside` checks the nearest parent only | DS-67 ×2 | the same | KILLED |
+| NR-M8 | the other root is not `~/`-expanded | DS-70 | DS-70 | KILLED |
+| NR-M7 | an other entry with no `branch` is skipped (run with NR-M5, M10, M8) | DS-63 [no branch] | the same | KILLED |
+| NR-M3 | the other root's `isinstance(str)` guard is dropped | DS-64 | DS-64, DS-65 | KILLED; wrong prediction: root `7` raises in the first repository's shape, which the launcher reads for every candidate, so `other`'s own refusal never prints |
+| NR-M4 | every other trusted checkout counts as an other root | DS-62 | DS-62 | KILLED |
+| NR-M9 | the other root is not passed through `realpath` (run with NR-M3, M4, M12) | DS-69 | nothing | SURVIVED: `identity()` follows a link above the root. DS-72 added for it, killed in round 3 |
+| NR-M12 | `same_root` is False when either folder is missing | DS-71 ×2 | the same | KILLED |
+| NR-M1 | `strictly_inside` counts `inner` itself (equal reads nested) | DS-46, DS-57 | the same | KILLED |
+| NR-M6b | the "strictly inside another's" direction is dropped | DS-59 ×2, DS-60 [other] ×2, DS-61 [inside], DS-67 [other], DS-71 [other] | the same | KILLED |
+| NR-M13 | `declared_shape` drops its own `root` shape check | DS-65 | DS-65, DS-64 | KILLED; wrong prediction: root `7` reaches `owned_root` for every candidate (NR-M3's mechanism) |
+| NR-M9 again | as above (run with NR-M1, M6b, M13) | DS-72 | DS-72 | KILLED |
+| NR-M6 | the "holds another's strictly inside" direction is dropped | DS-58 ×2, DS-60 [repo] ×2, DS-61 [holds], DS-63 ×2, DS-66, DS-67 [repo], DS-69, DS-70, DS-71 [repo] | the same and DS-72 | KILLED; wrong prediction: DS-72's link is held inside `repo`'s root |
+| NR-M11 | the nesting refusal is a bare `Refused` (run with NR-M6) | DS-60 [other] ×2 | the same as errors, and DS-59 ×2 | KILLED; wrong prediction: a bare `Refused` changes the launcher's refusal for every candidate (the `EntryRefused` hotspot) |
+| NR-M2 | `strictly_inside` is a spelled-prefix compare (run with NR-M6, M11) | DS-68 | DS-68 | KILLED |
+
+DS-69 [a link above the other root] is a **declared guard**. It guards against comparing two roots by their spellings,
+with neither `realpath` nor `identity()`. No single compiling mutation reddens it, because either one alone catches it.
+DS-72 holds the `realpath` on its own.

@@ -714,7 +714,7 @@ class OwnerBriefHold(DashScratch):
         self.given_finished_session(worktree=str(self.given_worktree_not_in_main()))
 
     def test_holds_a_finished_session_for_the_owner_brief__when_robowright_json_asks_for_one(self):
-        """R5.1 — owner_brief holds a finished session for the Lead — the Owner is handed work with no brief (assumed Q9)."""
+        """R5.1 — owner_brief holds a finished session for the Lead — the Owner is handed work with no brief."""
         self.given_settings(self.folder, "robowright.json", {"owner_brief": True})
 
         result = self.run_dash("--once", str(self.out))
@@ -723,7 +723,7 @@ class OwnerBriefHold(DashScratch):
         self.assertIn(HOLD_PHRASE, self.pages())
 
     def test_releases_the_session__when_its_owner_brief_exists(self):
-        """R5.2 — the owner brief releases the hold — a briefed session stays with the Lead forever (assumed Q9)."""
+        """R5.2 — the owner brief releases the hold — a briefed session stays with the Lead forever."""
         self.given_settings(self.folder, "robowright.json", {"owner_brief": True})
         self.given_owner_brief(self.folder)
 
@@ -734,7 +734,7 @@ class OwnerBriefHold(DashScratch):
         self.assertNotIn(HOLD_PHRASE, self.pages())
 
     def test_holds_the_session__when_robowright_json_uses_the_review_guide_alias(self):
-        """R5.3 — review_guide still asks for the brief — older projects hand the Owner work with no brief (assumed Q9)."""
+        """R5.3 — review_guide still asks for the brief — older projects hand the Owner work with no brief."""
         self.given_settings(self.folder, "robowright.json", {"review_guide": True})
 
         result = self.run_dash("--once", str(self.out))
@@ -743,7 +743,7 @@ class OwnerBriefHold(DashScratch):
         self.assertIn(HOLD_PHRASE, self.pages())
 
     def test_does_not_hold_the_session__when_owner_brief_is_false_beside_the_alias(self):
-        """R5.5 — owner_brief, when present, wins over review_guide — the Owner cannot turn the hold off (assumed Q9)."""
+        """R5.5 — owner_brief, when present, wins over review_guide — the Owner cannot turn the hold off."""
         self.given_settings(self.folder, "robowright.json", {"owner_brief": False, "review_guide": True})
 
         result = self.run_dash("--once", str(self.out))
@@ -4909,7 +4909,7 @@ class CrewQuiet(CrewScratch):
                           if tag == "ellipse"], DOZING_EYES)
 
     def test_frames_and_strokes_the_dozing_worker_as_the_crew_worker(self):
-        """029-U2.7.3 — the dozing Worker has the crew Worker's viewBox, strokes and `translate(-7 0)` prop — the quiet figure stands off the ground or at the row's weights (assumed Q9)."""
+        """029-U2.7.3 — the dozing Worker has the crew Worker's viewBox, strokes and `translate(-7 0)` prop — the quiet figure stands off the ground or at the row's weights."""
         self.when_written()
 
         figure = self.quiet_figure()
@@ -5203,7 +5203,7 @@ class CrewFigure(CrewScratch):
                 self.assertEqual(view_box(self.crew_figure(slug)), expected)
 
     def test_strokes_each_crew_robot_at_the_crew_weights(self):
-        """029-U2.12.7 — a crew robot's strokes are 3.5, 3.5, 4.9, 4.9, then each prop stroke × 0.945 — the 52 px robot is drawn at the row's or the art's weights (assumed Q9)."""
+        """029-U2.12.7 — a crew robot's strokes are 3.5, 3.5, 4.9, 4.9, then each prop stroke × 0.945 — the 52 px robot is drawn at the row's or the art's weights."""
         for slug, role in ROBOT_FIGURES.items():
             with self.subTest(role=role):
                 self.assert_strokes(self.crew_figure(slug), CREW_ROBOT_STROKES[role])
@@ -7806,6 +7806,9 @@ SHAPED_BRANCH = "me/SMPL-482/x"
 SHAPED_CONVENTION_BRANCH = f"robowright/{SHAPED}"
 SHAPE_BRANCH = "me/{ticket}/{slug}"
 SHAPE_UNIT = {"ticket_regex": "^SMPL-[0-9]+$", "slug_regex": "^[a-z0-9]+(-[a-z0-9]+)*$"}
+# The branch template of a first repository that declares the same root as the session's (WSD19): it differs from
+# SHAPE_BRANCH, so the two repositories' branches for one session differ.
+NEIGHBOUR_SHAPE_BRANCH = "other/{session}"
 # A direct build of a declared repository whose branch is `me/{session}`: the dashboard's direct-build names are
 # `<project>-<NNN>-<name>`, never `<ticket>-<slug>`, and `{session}` alone works on any install.
 DIRECT_BRANCH = f"me/{SLUG}"
@@ -8006,6 +8009,84 @@ class DeclaredShapeInMain(DashScratch):
         self.given_declared_repo(merged=False)
         self.git(self.repo, "tag", "main", SHAPED_BRANCH)
         self.given_shaped_session(self.given_worktree_at_its_place())
+
+        self.assert_unit_reads("awaiting acceptance")
+
+    # ------------------------------------------------------------ a shared root (worktree-shape-002 U1)
+
+    def given_shared_root(self, merged, neighbour_merged):
+        """`sample`'s repository (the session's: the project names it) and a first repository, `<scratch>/repos/other`,
+        which only project `other` names, both listed in `repos` and both declaring the root `<scratch>/wt`. `sample`'s
+        branch template is the fixture's and its `me/SMPL-482/x` is merged when `merged`; `other`'s template is
+        `other/{session}`, and it holds `me/SMPL-482/x` — a name its own shape never gives this session — in its main
+        when `neighbour_merged`, else one commit ahead, so a session read in the wrong repository reads the other answer."""
+        shared = self.base / "wt"
+        shared.mkdir()
+        self.given_declared_repo(merged=merged, root=str(shared))
+        self.root = shared
+        other_project = self.given_project(name="other")
+        other = self.base / "repos" / "other"
+        other.mkdir(parents=True)
+        self.git(other, "init", "-q", "-b", "main")
+        self.git(other, "commit", "-q", "--allow-empty", "-m", "base")
+        if neighbour_merged:
+            self.given_branch_at_main(other, SHAPED_BRANCH)
+        else:
+            self.given_branch_ahead_of_main(other, SHAPED_BRANCH)
+        self.given_settings(other_project, "robowright.json", {"repos": [{"name": "other", "path": str(other)}]})
+        settings = json.loads(self.launch_json.read_text())
+        settings["repos"].append(str(other))
+        settings["worktrees"][str(other)] = {"root": str(shared), "branch": NEIGHBOUR_SHAPE_BRANCH, "base": "main"}
+        self.given_launch_settings(**settings)
+
+    def test_reads_a_session_at_a_shared_root_complete__when_its_worktree_is_on_disk_and_its_own_repositorys_branch_is_merged(self):
+        """WSD19 (on disk, merged) — two repositories declare one root; the session's worktree there on `me/SMPL-482/x`, merged into its own repository's main, while the first holds that name unmerged: complete — read in the other repository, an accepted session waits forever."""
+        self.given_shared_root(merged=True, neighbour_merged=False)
+        self.given_shaped_session(self.given_worktree_at_its_place())
+
+        self.assert_unit_reads("complete")
+
+    def test_reads_a_session_at_a_shared_root_awaiting_acceptance__when_its_worktree_is_on_disk_and_its_own_repositorys_branch_is_unmerged(self):
+        """WSD19 (on disk, unmerged) — two repositories declare one root; the session's worktree there on `me/SMPL-482/x`, unmerged in its own repository, while the first holds that name in its main: awaiting acceptance — read in the other repository, unaccepted work reads as landed."""
+        self.given_shared_root(merged=False, neighbour_merged=True)
+        self.given_shaped_session(self.given_worktree_at_its_place())
+
+        self.assert_unit_reads("awaiting acceptance")
+
+    def test_reads_a_session_at_a_shared_root_awaiting_acceptance__when_its_worktree_is_gone_and_its_own_repositorys_branch_is_unmerged(self):
+        """WSD19 (gone, unmerged) — two repositories declare one root; the session's worktree gone, `me/SMPL-482/x` unmerged in its own repository, while the first holds that name in its main: awaiting acceptance — the first asked for the session's branch rather than its own shape's reads unaccepted work as landed."""
+        self.given_shared_root(merged=False, neighbour_merged=True)
+        self.given_shaped_session(self.gone_place())
+
+        self.assert_unit_reads("awaiting acceptance")
+
+    # ------------------------------------------------------------ a nested root (worktree-shape-002 U2)
+
+    def given_nested_root(self, merged):
+        """`sample`'s repository (the project names it) declaring the root `<scratch>/wt`, the fixture's entry otherwise,
+        its `me/SMPL-482/x` merged when `merged`; and a second repository, `<scratch>/repos/other`, which only project
+        `other` names, listed in `repos` and declaring `<scratch>/wt/inner`, strictly inside sample's. `other` holds
+        no branch for the session, so only the nesting can make the session read other than its own branch says."""
+        outer = self.base / "wt"
+        (outer / "inner").mkdir(parents=True)
+        self.given_declared_repo(merged=merged, root=str(outer))
+        self.root = outer
+        other_project = self.given_project(name="other")
+        other = self.base / "repos" / "other"
+        other.mkdir(parents=True)
+        self.git(other, "init", "-q", "-b", "main")
+        self.git(other, "commit", "-q", "--allow-empty", "-m", "base")
+        self.given_settings(other_project, "robowright.json", {"repos": [{"name": "other", "path": str(other)}]})
+        settings = json.loads(self.launch_json.read_text())
+        settings["repos"].append(str(other))
+        settings["worktrees"][str(other)] = {"root": str(outer / "inner"), "branch": NEIGHBOUR_SHAPE_BRANCH,
+                                             "base": "main"}
+        self.given_launch_settings(**settings)
+
+    def test_reads_a_session_awaiting_acceptance__when_another_repositorys_worktrees_root_is_inside_its_repositorys_root(self):
+        """WSD20 — WSD10's fixture with sample's entry well-formed at `<scratch>/wt` and a second repository's entry at `<scratch>/wt/inner`, `me/SMPL-482/x` merged, the worktree gone: awaiting acceptance, and the page renders — a nested root is a malformed entry, and read as well-formed its session lands unseen."""
+        self.given_nested_root(merged=True)
+        self.given_shaped_session(self.gone_place())
 
         self.assert_unit_reads("awaiting acceptance")
 

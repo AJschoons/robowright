@@ -3555,5 +3555,37 @@ class SharedRootTests(DeclaredShapeCase):
         self.assertEqual(self.branch(self.declared), f"{SHAPE_BRANCH}-u2")
 
 
+class NestedRootTests(DeclaredShapeCase):
+    """WS28: sample's root <root>/wt, its worktree <root>/wt/SMPL-482-x on me/SMPL-482/x, and
+    other, listed, declaring <root>/wt/inner — a root strictly inside another entry's refuses both entries."""
+
+    def setUp(self):
+        # Named, not super(): DeclaredShapeCase's worktree holds me/SMPL-482/x at <root>/worktrees; this fixture's
+        # first root is <root>/wt, so its worktree is made there instead.
+        RwGitCase.setUp(self)
+        self.worktrees = self.root / "wt"
+        self.declared = self.given_worktree(self.repo, self.worktrees / SHAPE_SESSION, SHAPE_BRANCH)
+        self.shape_session = self.given_session(SHAPE_SESSION)
+        self.other = self.given_repo(self.root / "repos" / "other")
+        inner = self.worktrees / "inner"
+        inner.mkdir()
+        self.given_shape_config({str(self.repo): self.entry(),
+                                 str(self.other): {"root": str(inner), "branch": "theirs/{session}"}},
+                                repos=(self.other,))
+
+    def test_add__a_root_inside_another_entrys_root_refuses_both_repositories_by_name(self):
+        """WS28 · `add f` in <root>/wt/SMPL-482-x, then in other's main checkout: launch-config naming the repository and
+        "`worktrees` entry for", each; nothing staged — served, a worktree sits among another repository's sessions."""
+        for where, repository in ((self.declared, self.repo), (self.other, self.other)):
+            with self.subTest(where=str(where)):
+                (where / "f").write_text("x\n")
+
+                err = self.refused("launch-config", "add", "f", cwd=where)
+
+                self.assertIn(ENTRY_REFUSAL, err)
+                self.assertIn(str(repository), err)
+                self.assertEqual(self.staged(where), [])
+
+
 if __name__ == "__main__":
     unittest.main()

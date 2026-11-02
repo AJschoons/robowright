@@ -18,9 +18,10 @@
 
   "projects_root": "~/Projects",
   "repos": ["~/Code/sample"],
-  "_worktrees_doc": "Rename _worktrees to worktrees to give a repository its own worktree shape instead of <repo>/.worktrees/<session> on robowright/<session>: the worktree is <root>/<session>, the branch fills {session}, and {ticket} and {slug} only on an install with a unit.ticket_regex (this one has none), and base_sha must be an ancestor of base. PROFILE-CONTRACT.md §6.",
+  "_worktrees_doc": "Rename _worktrees to worktrees to give a repository its own worktree shape instead of <repo>/.worktrees/<session> on robowright/<session>: the worktree is <root>/<session>, the branch fills {session}, and {ticket} and {slug} only on an install with a unit.ticket_regex (this one has none), and base_sha must be an ancestor of base. Two repositories may declare one root: a session's place there belongs to the one whose checkout folder name is its run.json repo. PROFILE-CONTRACT.md §6.",
   "_worktrees": {
-    "~/Code/sample": {"root": "~/Code/sample-worktrees", "branch": "me/{session}", "base": "main"}
+    "~/Code/sample": {"root": "~/Code/sample-worktrees", "branch": "me/{session}", "base": "main"},
+    "~/Code/sample-api": {"root": "~/Code/sample-worktrees", "branch": "api/{session}"}
   },
   "roles": {
     "planner": {

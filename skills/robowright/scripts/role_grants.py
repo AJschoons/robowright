@@ -28,7 +28,7 @@ well-formed `repos` nothing is granted.
     role_grants.py worktree <session_dir> plan|make  make run.json's missing worktree, or say how a launch would: the
                                                      Lead's sandbox cannot write the repository's git directory
     role_grants.py worktree <session_dir> hint       the line that makes it by hand, from the repository's shape
-    role_grants.py shaped <worktree>                 the trusted repository whose shape's root the worktree is directly in
+    role_grants.py shaped <worktree> <session_dir>   the trusted repository whose shape's root the worktree is directly in
     role_grants.py direct <project> <repo> <slug> <base> <briefing> plan|make|grants|path
                                                      the same for a direct build, which has no run.json, from argv held
                                                      to the same checks; `grants` prints document's fragment once the
@@ -794,7 +794,8 @@ def declared_shape(config: dict, repo: str, entry, trusted: list) -> Shape:
 
 def owned_root(config: dict, repo: str, root: str, trusted: list) -> str:
     """`root` once no session and no other repository owns it: not a link at any prefix, not the main checkout, not
-    inside another trusted repository, and not at or under the sessions, projects or accounting root."""
+    inside another trusted repository, not at or under the sessions, projects or accounting root, and not nested with
+    another entry's root."""
     try:
         root = unlinked("`worktrees` root", owner_git.home_path(root))
     except Refused as refusal:
@@ -807,7 +808,46 @@ def owned_root(config: dict, repo: str, root: str, trusted: list) -> str:
         if os.path.commonpath([real, os.path.realpath(owner)]) == os.path.realpath(owner):
             raise entry_refused(repo, f"has a `root` ({root}) at or under {owner_git.shown(owner)}, which a session or "
                                       f"another repository owns")
+    for key, other in other_roots(config, repo):
+        if strictly_inside(real, other):
+            raise entry_refused(repo, f"has a `root` ({root}) strictly inside the `root` of the `worktrees` entry for "
+                                      f"{owner_git.shown(key)}; nested roots refuse both entries")
+        if strictly_inside(other, real):
+            raise entry_refused(repo, f"has a `root` ({root}) holding the `root` of the `worktrees` entry for "
+                                      f"{owner_git.shown(key)} strictly inside it; nested roots refuse both entries")
     return root
+
+
+def other_roots(config: dict, repo: str) -> list:
+    """(key, real root) of every other `worktrees` entry whose `root` is an absolute or ~/ path, trusted or not, well-formed
+    otherwise or not: a nested root refuses both entries whichever of them launches."""
+    declared = config.get("worktrees")
+    found = []
+    for key, entry in (declared.items() if isinstance(declared, dict) else ()):
+        if os.path.realpath(owner_git.home_path(key)) == repo or not isinstance(entry, dict):
+            continue
+        root = entry.get("root")
+        if isinstance(root, str) and owner_git.REPO_ENTRY.fullmatch(root):
+            found.append((key, os.path.realpath(owner_git.home_path(root))))
+    return found
+
+
+def same_root(one: str, other: str) -> bool:
+    """One folder by device and inode when both exist, else by real path: letter case never separates two spellings."""
+    first, second = identity(one), identity(other)
+    if first is not None and second is not None:
+        return first == second
+    return one == other
+
+
+def strictly_inside(inner: str, outer: str) -> bool:
+    """True when a parent folder of the real path `inner`, up to `/`, is the same root as `outer`; equal is not inside."""
+    current = inner
+    while current != "/":
+        current = os.path.dirname(current)
+        if same_root(current, outer):
+            return True
+    return False
 
 
 def place_of(repo: str, session_name: str, trusted: list) -> tuple:
@@ -833,30 +873,44 @@ def place_of(repo: str, session_name: str, trusted: list) -> tuple:
     return f"{shape.root}/{session_name}", branch
 
 
-def located_repo(worktree, name: str, what: str) -> tuple:
+def chosen(candidates: list, named, place: str) -> str:
+    """The one candidate `place` belongs to: the only one, else the one whose checkout basename is run.json's `repo`,
+    compared exactly; else Refused naming run.json repo and every candidate. `named` is read only at a shared place."""
+    if len(candidates) == 1:
+        return candidates[0]
+    listed = owner_git.shown(", ".join(candidates))
+    if not (isinstance(named, str) and named):
+        raise Refused(f"{owner_git.shown(place)} is the place the shapes of more than one repository give ({listed}), "
+                      f"and run.json repo names none of them; nothing is made")
+    matches = [repo for repo in candidates if os.path.basename(os.path.realpath(repo)) == named]
+    if len(matches) == 1:
+        return matches[0]
+    how = "no" if not matches else "more than one"
+    raise Refused(f"{owner_git.shown(place)} is the place the shapes of more than one repository give ({listed}), and "
+                  f"run.json repo {owner_git.shown(json.dumps(named))} is the checkout name of {how} one of them; "
+                  f"nothing is made")
+
+
+def located_repo(worktree, name: str, what: str, named) -> tuple:
     """(repository, shape) of the repository owner_git trusts whose <root>/<name> `worktree` is, spelled exactly so;
-    else Refused naming `what`, and each trusted repository whose entry is out of shape. A place two repositories'
-    shapes give is refused: run.json names no repository to choose between them."""
+    else Refused naming `what`, and each trusted repository whose entry is out of shape. A place more than one
+    repository's shape gives belongs to the one `chosen` picks by `named`, run.json's `repo`."""
     trusted = owner_git.configured_repos()
-    places, shared, refused = {}, {}, []
+    places, refused = {}, []
     for repo in trusted:
         try:
             shape = shape_of(repo, trusted)
         except EntryRefused as refusal:
             refused.append(str(refusal))
             continue
-        place = f"{shape.root}/{name}"
-        shared.setdefault(place, []).append(repo)
-        places[place] = (repo, shape)
-    if len(shared.get(worktree, [])) > 1:
-        raise Refused(f"{what} {owner_git.shown(json.dumps(worktree))} is the place the shapes of more than one repository "
-                      f"give ({owner_git.shown(', '.join(shared[worktree]))}); nothing is made")
+        places.setdefault(f"{shape.root}/{name}", []).append((repo, shape))
     if worktree not in places:
         raise Refused(f"{what} {owner_git.shown(json.dumps(worktree))} is not where the launcher makes one: "
                       f"<root>/{name} of the shape of a repository `repos` in {owner_git.launch_json()} lists and a "
                       f"project's robowright.json names ({owner_git.shown(', '.join(places) or 'none')})"
                       + "".join(f"; {owner_git.shown(why)}" for why in refused))
-    return places[worktree]
+    repo = chosen([found for found, _ in places[worktree]], named, worktree)
+    return next(entry for entry in places[worktree] if entry[0] == repo)
 
 
 def branch_exists(repo: str, branch: str) -> bool:
@@ -911,7 +965,7 @@ def session_place(session_dir: str) -> tuple:
     if phase in ("done", "parked"):
         raise Refused(f"run.json phase is {owner_git.shown(json.dumps(phase))}: a finished session's worktree is not made")
     name = os.path.basename(session_dir)
-    repo, shape = located_repo(run.get("worktree"), name, "run.json worktree")
+    repo, shape = located_repo(run.get("worktree"), name, "run.json worktree", run.get("repo"))
     worktree, branch = place_of(repo, name, owner_git.configured_repos())
     return run, phase, repo, shape, worktree, branch
 
@@ -952,9 +1006,11 @@ def worktree_hint(session_dir: str) -> str:
     return f"git -C {shlex.quote(repo)} worktree add -b {shlex.quote(branch)} {shlex.quote(worktree)} {base}"
 
 
-def shaped(worktree: str) -> str:
-    """The one repository owner_git trusts whose shape's root `worktree` lies directly in; else Refused, naming each
-    trusted repository whose entry is out of shape, or each repository that shares the root."""
+def shaped(worktree: str, session_dir: str) -> str:
+    """The one repository owner_git trusts whose shape's root `worktree` lies directly in, at a root more than one
+    repository declares the one `chosen` picks by the session's run.json `repo`, and which lists `worktree`; else
+    Refused, naming each trusted repository whose entry is out of shape, or each candidate."""
+    named = run_json(session_folder(launch_config(), session_dir)).get("repo")
     trusted = owner_git.configured_repos()
     found, refused = [], []
     for repo in trusted:
@@ -963,13 +1019,17 @@ def shaped(worktree: str) -> str:
                 found.append(repo)
         except EntryRefused as refusal:
             refused.append(str(refusal))
+    if not found:
+        raise Refused(f"{owner_git.shown(worktree)} is directly in no trusted repository's `worktrees` root"
+                      + "".join(f"; {owner_git.shown(why)}" for why in refused))
     if len(found) == 1:
         return found[0]
-    if found:
-        raise Refused(f"{owner_git.shown(worktree)} is directly in a `worktrees` root more than one repository declares "
-                      f"({owner_git.shown(', '.join(found))})")
-    raise Refused(f"{owner_git.shown(worktree)} is directly in no trusted repository's `worktrees` root"
-                  + "".join(f"; {owner_git.shown(why)}" for why in refused))
+    repo = chosen(found, named, worktree)
+    # The launcher runs git in the repository the worktree's own git directory names, not in the one chosen here.
+    if os.path.realpath(worktree) not in owner_git.listed_by(repo):
+        raise Refused(f"{owner_git.shown(worktree)} is not a worktree of {owner_git.shown(repo)}, the repository "
+                      f"run.json repo {owner_git.shown(json.dumps(named))} picks at this shared root")
+    return repo
 
 
 def add_worktree(repo: str, args: list):
@@ -1131,13 +1191,13 @@ def main(args) -> int:
             owner_git.emit(sys.stdout, made_worktree(args[1], make=args[2] == "make") + "\n")
         elif len(args) == 3 and args[0] == "worktree" and args[2] == "hint":
             owner_git.emit(sys.stdout, worktree_hint(args[1]) + "\n")
-        elif len(args) == 2 and args[0] == "shaped":
-            owner_git.emit(sys.stdout, shaped(args[1]) + "\n")
+        elif len(args) == 3 and args[0] == "shaped":
+            owner_git.emit(sys.stdout, shaped(args[1], args[2]) + "\n")
         elif len(args) == 7 and args[0] == "direct" and args[6] in ("plan", "make", "grants", "path"):
             owner_git.emit(sys.stdout, direct(args[1:]) + "\n")
         else:
             print("usage: role_grants.py worker <session_dir> <worktree> | document [<cwd>] | checkouts <session_dir> | "
-                  "worktree <session_dir> plan|make|hint | shaped <worktree> | "
+                  "worktree <session_dir> plan|make|hint | shaped <worktree> <session_dir> | "
                   "direct <project> <repo> <slug> <base> <briefing> plan|make|grants|path", file=sys.stderr)
             return 1
     except Refused as refusal:

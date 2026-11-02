@@ -207,9 +207,10 @@ carries them, and nothing warns. `publish: true` is refused as `bad-publish`;
 
 A project's `robowright.json.repos` lists every repository it touches, each `path` absolute or
 `~/`-rooted; the resolver refuses a relative one (`scripts/robowright-resolve.py`). The Planner
-names one entry per brief in `run.json.repo`, and the Lead creates the worktree from that entry's
-`path`, per that repo's hook → Worktree; a `repo` that names no entry is refused
-(`../lead/SKILL.md` "Launch hand-off"). A Robowright Session works in one repository.
+names the repository of each brief in `run.json.repo`, and the launcher derives the worktree's
+place from that repository's shape (`PROFILE-CONTRACT.md` §6); `run.json.repo`, a checkout folder
+name, chooses only where more than one repository's shape gives the same place (`../lead/SKILL.md` "Launch hand-off"). A Robowright
+Session works in one repository.
 
 When a unit needs a finished Robowright Session's commit from another repo, the Planner copies that
 repo's `repos[].path` into the brief's `depends_on` entry. The Lead launches only once the

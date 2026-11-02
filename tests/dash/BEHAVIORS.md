@@ -1262,6 +1262,8 @@ Rules:
 - R7 — A direct build of a declared repository is found by its shape's branch, and its accept record is checked
   against that branch.
 - R8 — With no `worktrees` entry, every existing dash row passes unchanged.
+- R9 — At a root two repositories declare, a session is read once, on its own repository's branch: in the listed
+  worktree's own repository when on disk, else through each trusted repository's own shape's branch.
 
 Q3 is the one Assumed row (WSD12): a session name the shape's `{ticket}`/`{slug}` cannot be filled from reads not in
 main. It is not a "malformed entry" in the brief's Language. The brief says in main only on positive evidence (039),
@@ -1289,7 +1291,13 @@ value for either.
 | WSD16 | R7 | the direct-build fixture; main moved, then a pick of `me/sample-001-first`; `ACCEPTED.json` naming `main~1`; the branch kept | `sample` | U1 reads `with the Lead` | U3 build (`:721`); 055 bound 1 "while [the branch] is still in any trusted repository … the patch-id of the branch's diff"; 055-A5 | `test_reads_a_declared_direct_build_with_the_lead__when_its_accept_record_names_a_commit_on_main_that_is_not_its_shape_branchs_change` |
 | WSD17 | R8 | no `worktrees` entry | the whole suite | every existing dash row passes; no existing test edited | U3 check 6; brief invariant "with no `worktrees` entry, behaviour is byte-for-byte today's". **Declared guard** | every test before `WSD` |
 | WSD18 | R6 | on disk; `me/SMPL-482/x` unmerged; a tag `main` at its tip | `sample` | U1 reads `awaiting acceptance` | D8 "`base` is optional, a local branch name … an ancestor of `refs/heads/<base>`"; the finish review's polish item | `DeclaredShapeInMain.test_reads_a_declared_session_awaiting_acceptance__when_a_tag_shares_its_declared_base_name_at_its_unmerged_branch` |
+| WSD19 | R9, R1, R3 | `<scratch>/repos/sample` (the session's; project `sample` names it, branch `me/{ticket}/{slug}`) and a first repository `<scratch>/repos/other` (project `other`, branch `other/{session}`) both declaring root `<scratch>/wt`; `other` holds `me/SMPL-482/x` too, a name its shape never gives. In turn: on disk at `<scratch>/wt/SMPL-482-x`, `me/SMPL-482/x` merged in `sample`, unmerged in `other`; on disk, unmerged in `sample`, at `other`'s main; gone, unmerged in `sample`, at `other`'s main | `sample` | U1 reads, in turn: `complete`; `awaiting acceptance`; `awaiting acceptance` | worktree-shape-002 U1 check 9: "**On disk** … `complete` when that branch is merged into the second's `main`, `awaiting acceptance` when unmerged — read in the listed worktree's own repository. **Gone**, the branch unmerged in the second: `awaiting acceptance`, whatever the first repository holds — read through each trusted repository's own shape's branch". Assumed for the gone case: "whatever the first holds" is pinned with the first holding the session's branch name, not its own shape's branch for the session (Q9). **Declared guard** (A7: no dashboard change); green at red | `DeclaredShapeInMain.test_reads_a_session_at_a_shared_root_complete__when_its_worktree_is_on_disk_and_its_own_repositorys_branch_is_merged`; `…_awaiting_acceptance__when_its_worktree_is_on_disk_and_its_own_repositorys_branch_is_unmerged`; `…_awaiting_acceptance__when_its_worktree_is_gone_and_its_own_repositorys_branch_is_unmerged` |
+| WSD20 | R4 | WSD10's fixture with `sample`'s entry well-formed at root `<scratch>/wt`: gone; `me/SMPL-482/x` merged; the second repository `<scratch>/repos/other` (project `other`, in `repos`, holding no branch for the session) declaring root `<scratch>/wt/inner` | `sample` | exit 0; U1 reads `awaiting acceptance` | worktree-shape-002 U2 check 8: "the fixture of WSD10 with the second repository's entry nesting the project's → exit 0; U1 reads `awaiting acceptance` (R4)"; its Language "Malformed entry … plus, after U2, a nested one" | `DeclaredShapeInMain.test_reads_a_session_awaiting_acceptance__when_another_repositorys_worktrees_root_is_inside_its_repositorys_root` |
 
 Expected at red (before the dashboard change; the caller runs it): WSD2, WSD7 and WSD9 pass, because today's
 `robowright/<slug>` reading gives the same answer for them. Each owes its kill in `TEST-LEDGER.md`. Every other row
 fails on its assertion.
+
+WSD19's three tests guard against reading a shared root's session in the other repository; none needs a dashboard change.
+
+WSD20: the second repository holds no branch for the session, so R3 alone cannot make it read `awaiting acceptance`; only the nesting does.

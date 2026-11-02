@@ -942,3 +942,27 @@ every existing row (U3 check 6).
 WSD18 (the finish review's polish item, D8) was red at `fc8688d` before the fix (`complete` for `awaiting
 acceptance`: git read the bare `main` as the tag), which is its kill; the fix reads a declared base as
 `refs/heads/<base>`.
+
+
+WSD19 (worktree-shape-002 U1, a shared root) was green at red: A7 expected no dashboard change. One round, kill sets
+predicted first, `tools/robowright-dash.py` restored after (`git status --short` empty).
+
+| # | Mutation | Predicted | Observed | Verdict |
+|---|---|---|---|---|
+| WSDM-D | `has_reached_main` reads an on-disk worktree in `trusted[0]`, not the repository that lists it | WSD19 (on disk, merged), WSD19 (on disk, unmerged) | WSD19 (on disk, merged) | KILLED (merged); wrong prediction for (on disk, unmerged): `trusted[0]` holds neither branch, so it also reads unmerged |
+| WSDM-E | every trusted repository asked for the project's repository's branch, not its own shape's | WSD19 (gone, unmerged) | WSD19 (gone, unmerged) | KILLED |
+
+Four existing rows also reddened in that round (an unknown key, a branch two sessions would share, a name that does
+not split, an undeclared repository's convention branch); the two mutations ran together, so those are not
+attributed between them.
+
+WSD19 (on disk, unmerged) is a **declared guard**: it guards reading an on-disk worktree in a repository other than
+the one listing it, where that other holds the session's branch name in its main. The round ceiling (4) was reached;
+the next mutation would read it in `trusted[-1]`, which is `other` in this fixture.
+
+## Nested roots (worktree-shape-002 U2)
+
+WSD20 was red before the nesting check (`complete · 482` for `awaiting acceptance`). It ran in the launcher suite's U2
+rounds (`tests/run-launch/TEST-LEDGER.md` → Nested roots). NR-M6, which drops the "holds another's root" direction,
+reddened it as predicted: sample's entry, which holds `other`'s root, reads as well-formed again. Under NR-M6b and
+the other rounds it stayed green, as predicted. KILLED.

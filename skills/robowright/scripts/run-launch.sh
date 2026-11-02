@@ -1389,7 +1389,7 @@ TOOLS="$(jq -r --arg lean "$LEAN_TOOLS" --arg known "$KNOWN_TOOLS" '
 # proves this is a linked worktree rather than a checkout that merely sits there.
 case "$WORKTREE" in
     */worktrees/*|*/.worktrees/*) ;;
-    *) python3 "$GRANTS_TOOL" shaped "$WORKTREE" >/dev/null \
+    *) python3 "$GRANTS_TOOL" shaped "$WORKTREE" "$SESSION_DIR" >/dev/null \
         || fail "worktree must live under a .worktrees/ or worktrees/ directory or a declared worktrees root, never the main clone: $WORKTREE" ;;
 esac
 # run.json.worktree is session-written: git runs inside it only once a configured repository lists

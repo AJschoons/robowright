@@ -3107,6 +3107,16 @@ MALFORMED = {
     "a relative root": {"root": "worktrees"},
     "a base that is not a string": {"base": 7},
 }
+# A shared root (DS-45 to DS-57): `other`, a second trusted checkout, declares the fixture's
+# root too, on its own branch template, so a row can tell the two repositories apart. Every tie-break refusal names
+# TIE_BREAK; OLD_SHARED_REFUSAL is the retired any-shared-root refusal; rows assert it is absent.
+OTHER_SHAPE_BRANCH = "other/{session}"
+OTHER_BRANCH = "other/" + SESSION
+TIE_BREAK = "run.json repo"
+OLD_SHARED_REFUSAL = "more than one repository declares"
+# Nested roots (DS-58 to DS-72): the two orders launch.json may list the two entries in, keyed by
+# what each case is called; the value is given_roots' `other_first`.
+ENTRY_ORDERS = {"repo's entry first": False, "other's entry first": True}
 
 
 def in_process_grants(case):
@@ -3370,7 +3380,7 @@ class DeclaredShapeTests(LauncherCase):
         self.assertIn("worktree add -b %s %s %s" % (SHAPE_BRANCH, self.worktree, off), out)
 
     def test_launcher__a_declared_root_in_a_place_a_session_or_another_repository_owns_is_refused(self):
-        """DS-15: the Owner's git must never be pointed at a folder a session or another repository owns (assumed Q1)."""
+        """DS-15: the Owner's git must never be pointed at a folder a session or another repository owns."""
         other = self.root / "other"
         self.given_repo(other)
         self.given_owner_repos(self.repo, other)
@@ -3424,7 +3434,7 @@ class DeclaredShapeTests(LauncherCase):
         self.assertEqual(self.main_status(), "")
 
     def test_launcher__a_root_outside_the_checkout_writes_no_worktrees_exclude_line(self):
-        """DS-18: a root outside the checkout cannot dirty its status — a line written anyway is a stray rule in a file every worktree shares (assumed Q11)."""
+        """DS-18: a root outside the checkout cannot dirty its status — a line written anyway is a stray rule in a file every worktree shares."""
         self.given_briefed()
 
         self.assertTrue(self.start()[0])
@@ -3433,7 +3443,7 @@ class DeclaredShapeTests(LauncherCase):
         self.assertEqual([line for line in exclude if "worktrees" in line and not line.startswith("#")], [], exclude)
 
     def test_launcher__a_malformed_entry_refuses_its_repositorys_launch_by_name(self):
-        """DS-19: a malformed entry is refused by name before git — read loosely it would derive a path or branch the Owner never declared (assumed Q1)."""
+        """DS-19: a malformed entry is refused by name before git — read loosely it would derive a path or branch the Owner never declared."""
         for what, change in MALFORMED.items():
             with self.subTest(what):
                 self.given_declaration({str(self.repo): self.entry(**change)})
@@ -3443,8 +3453,8 @@ class DeclaredShapeTests(LauncherCase):
 
                 self.assert_refused_before_git(code, out, ENTRY_REFUSAL)
 
-    def test_launcher__a_place_two_repositories_shapes_share_is_refused(self):
-        """DS-45: run.json names no repository, so a <root>/<session> two shapes give is no one place — picking either makes the worktree in a repository the brief may not mean."""
+    def test_launcher__a_place_two_repositories_shapes_share_is_refused_by_name_when_run_json_names_no_repo(self):
+        """DS-45: with no run.json repo, a <root>/<session> two shapes give is no one place — picking either makes the worktree in a repository the brief may not mean."""
         other = self.root / "other"
         self.given_repo(other)
         self.given_owner_repos(self.repo, other)
@@ -3453,7 +3463,8 @@ class DeclaredShapeTests(LauncherCase):
 
         code, out = self.launch("--yes")
 
-        self.assert_refused_after_reads(code, out, "more than one repository")
+        self.assert_refused_after_reads(code, out, TIE_BREAK)
+        self.assert_names_each_candidate(out, self.repo, other)
 
     def test_launcher__a_malformed_entry_leaves_a_repository_with_no_entry_launching_as_before(self):
         """DS-20: one repository's malformed entry refuses that repository alone — refusing the others stops every unrelated session."""
@@ -3551,6 +3562,309 @@ class DeclaredShapeTests(LauncherCase):
         self.assertEqual(code, 1, out)
         self.assertIn("git -C %s worktree add -b %s %s <base>" % (self.repo, SHAPE_BRANCH, self.worktree), out)
 
+    # ------------------------------------------------------------ a shared root (worktree-shape-002 U1)
+
+    def given_shared_root(self):
+        """`other` (`<root>/other`), a second trusted checkout, and both entries declaring the root `<root>/wt`: `repo`'s
+        the fixture's (`me/{ticket}/{slug}`, base `main`), `other`'s `other/{session}` on base `trunk`, a branch only
+        `other` holds, so a launch that reads one repository's shape for the other's worktree refuses on its base check.
+        The root has no `worktrees` component, so the launcher's late check reaches `shaped`."""
+        self.other = self.root / "other"
+        self.other_base = self.given_repo(self.other)
+        subprocess.run(GIT + ["branch", "trunk", self.other_base], cwd=self.other, check=True, capture_output=True)
+        self.shared_root = self.root / "wt"
+        self.shared_root.mkdir()
+        self.shared_worktree = self.shared_root / SESSION
+        self.given_owner_repos(self.repo, self.other)
+        self.given_declaration(self.shared_entries())
+
+    def shared_entries(self):
+        return {str(self.repo): self.entry(root=str(self.shared_root)),
+                str(self.other): self.entry(root=str(self.shared_root), branch=OTHER_SHAPE_BRANCH, base="trunk")}
+
+    def given_third_trusted_repo(self):
+        """`<root>/sample`, trusted beside `repo` and `other`, with no entry: on the convention, so no candidate."""
+        third = self.root / "sample"
+        self.given_repo(third)
+        self.given_owner_repos(self.repo, self.other, third)
+        return third
+
+    def given_briefed_at_the_shared_root(self, **fields):
+        """run.json for `other`'s session at the shared root: worktree <root>/wt/SMPL-482-x, units[0].branch
+        `other/SMPL-482-x`, base_sha other's base, plus `fields`; a `repo` not among them is absent."""
+        self.given_briefed(worktree=self.shared_worktree, branch=OTHER_BRANCH, base=self.other_base, **fields)
+
+    def given_others_worktree_past_preflight(self, **fields):
+        """`other`'s worktree already at <root>/wt/SMPL-482-x on `other/SMPL-482-x` at its base, as DS-47 leaves it, and
+        the session implementing with a session id, plus `fields`; a `repo` not among them is absent."""
+        subprocess.run(GIT + ["worktree", "add", "-q", "-b", OTHER_BRANCH, str(self.shared_worktree), self.other_base],
+                       cwd=self.other, check=True, capture_output=True)
+        self.given_implementing(worktree=str(self.shared_worktree), base_sha=self.other_base,
+                                unit_fields=({"branch": OTHER_BRANCH},), session_id=OLD_ID, **fields)
+        self.log.write_text("")
+
+    def repository_of(self, worktree):
+        """The main checkout whose repository `worktree` is a worktree of, read from git's own common directory."""
+        common = subprocess.run(["git", "-C", str(worktree), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                                capture_output=True, text=True).stdout.strip()
+        return Path(os.path.realpath(common)).parent
+
+    def assert_names_each_candidate(self, out, *candidates):
+        """The refusal line naming `run.json repo` names each candidate's path (one `refused:` line)."""
+        refusal = [line for line in out.splitlines() if TIE_BREAK in line]
+        for candidate in candidates:
+            self.assertTrue(any(str(candidate) in line for line in refusal), f"{candidate} is not in {refusal}")
+
+    def assert_tie_break_refused(self, code, out, *candidates):
+        """The tie-break refusal, before git: exit 1, nothing at the shared place, and the `run.json repo` line naming each candidate."""
+        self.assert_refused_before_git(code, out, TIE_BREAK, self.shared_worktree)
+        self.assert_names_each_candidate(out, *candidates)
+
+    def test_launcher__a_dry_run_at_a_shared_root_prints_the_line_for_the_repository_run_json_repo_names(self):
+        """DS-46: at a shared root the plan is the named repository's derived line — another candidate's line names a worktree the brief did not plan."""
+        self.given_shared_root()
+        self.given_briefed_at_the_shared_root(repo="other")
+
+        code, out = self.plan()
+
+        self.assertEqual(code, 0, out)
+        self.assertIn("worktree add -b %s %s %s" % (OTHER_BRANCH, self.shared_worktree, self.other_base), out)
+        self.assertFalse(self.shared_worktree.exists())
+        self.assertEqual(self.worktree_adds(), [])
+
+    def test_launcher__a_shared_roots_worktree_is_made_in_the_repository_run_json_repo_names_on_its_branch(self):
+        """DS-47: the tracer — two repositories at one root, and the session's worktree made in the one run.json repo names; made in the other, the Worker edits the wrong repository."""
+        self.given_shared_root()
+        self.given_briefed_at_the_shared_root(repo="other")
+
+        argv, out = self.start()
+
+        self.assertTrue(argv, out)
+        self.assertEqual(self.repository_of(self.shared_worktree), self.other)
+        self.assertEqual(self.checked_out(self.shared_worktree), OTHER_BRANCH)
+        self.assertEqual(self.rev(self.shared_worktree, "HEAD"), self.other_base)
+
+    def test_launcher__the_first_repository_at_a_shared_root_gets_the_worktree_on_its_own_branch_when_run_json_repo_names_it(self):
+        """DS-48: the chosen candidate's own shape decides branch and base — the last repository listed overwriting the place hands the first's session the second's shape."""
+        self.given_shared_root()
+        self.given_briefed(worktree=self.shared_worktree, repo="repo")
+
+        argv, out = self.start()
+
+        self.assertTrue(argv, out)
+        self.assertEqual(self.repository_of(self.shared_worktree), self.repo)
+        self.assertEqual(self.checked_out(self.shared_worktree), SHAPE_BRANCH)
+        self.assertEqual(self.rev(self.shared_worktree, "HEAD"), self.base)
+
+    def test_launcher__a_run_json_repo_equal_to_no_candidates_basename_is_refused_by_name_before_git(self):
+        """DS-49: only a candidate's exact checkout basename picks — a repository outside the place, a name matched loosely, or robowright.json's name would pick by something other than the derived place."""
+        self.given_shared_root()
+        self.given_third_trusted_repo()
+        for what, repo in {"a trusted repository that is no candidate": "sample",
+                           "the second's basename in other letter case": "Other",
+                           "the name robowright.json gives the second": "repo-1"}.items():
+            with self.subTest(what):
+                self.given_briefed_at_the_shared_root(repo=repo)
+
+                code, out = self.launch("--yes")
+
+                self.assert_tie_break_refused(code, out, self.repo, self.other)
+
+    def test_launcher__a_run_json_repo_two_candidates_share_as_basename_is_refused_by_name_before_git(self):
+        """DS-50: two checkouts with one basename at one root are no one repository — picking either makes the worktree in a checkout the Owner cannot tell apart from the other."""
+        self.given_shared_root()
+        twin = self.root / "elsewhere" / "other"
+        self.given_repo(twin)
+        self.given_owner_repos(self.repo, self.other, twin)
+        self.given_declaration(dict(self.shared_entries(),
+                                    **{str(twin): self.entry(root=str(self.shared_root), branch=OTHER_SHAPE_BRANCH)}))
+        self.given_briefed_at_the_shared_root(repo="other")
+
+        code, out = self.launch("--yes")
+
+        self.assert_tie_break_refused(code, out, self.repo, self.other, twin)
+
+    def test_launcher__a_missing_run_json_repo_at_a_shared_root_is_refused_by_name_before_git(self):
+        """DS-51: run.json repo is session-written — read loosely, an absent or ill-shaped value would fall back to some candidate the brief never named."""
+        self.given_shared_root()
+        for what, fields in {"absent": {}, "null": {"repo": None}, "the empty string": {"repo": ""},
+                             "a list": {"repo": []}}.items():
+            with self.subTest(what):
+                self.given_briefed_at_the_shared_root(**fields)
+
+                code, out = self.launch("--yes")
+
+                self.assert_tie_break_refused(code, out, self.repo, self.other)
+
+    def test_launcher__an_unshared_place_launches_as_before_whatever_run_json_repo_holds(self):
+        """DS-52: with one candidate run.json repo is not read — reading it refuses every session whose brief names its repository loosely."""
+        other = self.root / "other"
+        self.given_repo(other)
+        self.given_owner_repos(self.repo, other)
+        for what, fields in {"a trusted repository that is no candidate": {"repo": "other"},
+                             "not a string": {"repo": []}, "absent": {}}.items():
+            with self.subTest(what):
+                self.given_briefed(**fields)
+
+                code, out = self.plan()
+
+                self.assertEqual(code, 0, out)
+                self.assertIn("worktree add -b %s %s %s" % (SHAPE_BRANCH, self.worktree, self.base), out)
+                self.assertFalse(self.worktree.exists())
+                self.assertEqual(self.worktree_adds(), [])
+
+    def test_launcher__the_late_check_admits_a_shared_roots_worktree_of_the_repository_run_json_repo_names(self):
+        """DS-53: a resume of a worktree at a shared root must pass the admission — refused there, a session made at a shared root can never be resumed."""
+        self.given_shared_root()
+        self.given_others_worktree_past_preflight(repo="other")
+
+        code, out = self.plan("--resume")
+
+        self.assertEqual(code, 0, out)
+        self.assertNotIn(OLD_SHARED_REFUSAL, out)
+        self.assertIn("--resume=%s" % OLD_ID, out)
+
+    def test_launcher__the_late_check_refuses_a_shared_roots_worktree_when_run_json_repo_names_the_other_candidate(self):
+        """DS-54: an existing worktree of `other` with run.json repo naming `repo` — admitted, the session runs in a repository its brief does not name."""
+        self.given_shared_root()
+        self.given_others_worktree_past_preflight(repo="repo")
+
+        code, out = self.plan("--resume")
+
+        self.assertEqual(code, 1, out)
+        self.assertIn(TIE_BREAK, out)
+        self.assertNotIn("--resume=%s" % OLD_ID, out)
+
+    def test_launcher__the_late_check_refuses_a_shared_roots_worktree_when_run_json_repo_is_absent(self):
+        """DS-55: at a shared root an absent run.json repo picks nothing at the late check either — admitted, the session runs in whichever repository git lists."""
+        self.given_shared_root()
+        self.given_others_worktree_past_preflight()
+
+        code, out = self.plan("--resume")
+
+        self.assertEqual(code, 1, out)
+        self.assertIn(TIE_BREAK, out)
+        self.assertNotIn("--resume=%s" % OLD_ID, out)
+
+    def test_launcher__a_tie_break_refusal_hands_over_run_jsons_own_worktree_line(self):
+        """DS-56: when no candidate is chosen, no derived hint exists — a `git -C <candidate>` line hands the Owner a command in a repository nobody chose."""
+        self.given_shared_root()
+        self.given_third_trusted_repo()
+        self.given_briefed_at_the_shared_root(repo="sample")
+
+        code, out = self.plan()
+
+        self.assertEqual(code, 1, out)
+        self.assertIn(TIE_BREAK, out)
+        self.assertIn("git worktree add -b %s %s <base>" % (OTHER_BRANCH, self.shared_worktree), out)
+        self.assertNotIn("git -C %s " % self.repo, out)
+        self.assertNotIn("git -C %s " % self.other, out)
+
+    # ------------------------------------------------------------ nested roots (worktree-shape-002 U2)
+
+    def given_roots(self, root, other_root, other_first=False):
+        """The shared-root fixture's two entries with `repo`'s `root` and `other`'s `root` written as given (`other`'s
+        branch `other/{session}` on base `trunk`); `other_first` lists `other`'s entry first in launch.json."""
+        mine = (str(self.repo), self.entry(root=root))
+        theirs = (str(self.other), self.entry(root=other_root, branch=OTHER_SHAPE_BRANCH, base="trunk"))
+        self.given_declaration(dict([theirs, mine] if other_first else [mine, theirs]))
+
+    def given_nested_root(self):
+        """The shared-root fixture with `other`'s root moved to `<root>/wt/inner`, an existing folder strictly inside
+        `repo`'s `<root>/wt`."""
+        self.given_shared_root()
+        self.inner_root = self.shared_root / "inner"
+        self.inner_root.mkdir()
+        self.given_roots(str(self.shared_root), str(self.inner_root))
+
+    def test_launcher__a_session_at_a_root_holding_another_entrys_root_is_refused_by_name_before_git_in_either_order(self):
+        """DS-58: a root strictly inside another entry's refuses both, whichever comes first — the outer one launching puts a worktree beside another repository's worktrees, and an order-dependent answer changes with an edit to launch.json."""
+        self.given_nested_root()
+        worktree = self.shared_root / SESSION
+        for what, other_first in ENTRY_ORDERS.items():
+            with self.subTest(what):
+                self.given_roots(str(self.shared_root), str(self.inner_root), other_first)
+                self.given_briefed(worktree=worktree)
+
+                code, out = self.launch("--yes")
+
+                self.assert_refused_before_git(code, out, ENTRY_REFUSAL, worktree)
+                self.assertIn(str(self.repo), out)
+                self.assertIn(str(self.other), out)
+
+    def test_launcher__a_session_at_a_root_inside_another_entrys_root_is_refused_by_name_before_git_in_either_order(self):
+        """DS-59: the inner root's session is refused as the outer's is — launched, its worktree sits where the other repository's sessions are made."""
+        self.given_nested_root()
+        worktree = self.inner_root / SESSION
+        for what, other_first in ENTRY_ORDERS.items():
+            with self.subTest(what):
+                self.given_roots(str(self.shared_root), str(self.inner_root), other_first)
+                self.given_briefed(worktree=worktree, branch=OTHER_BRANCH, base=self.other_base)
+
+                code, out = self.launch("--yes")
+
+                self.assert_refused_before_git(code, out, ENTRY_REFUSAL, worktree)
+                self.assertIn(str(self.repo), out)
+                self.assertIn(str(self.other), out)
+
+    def test_launcher__a_root_that_holds_trusted_checkouts_is_not_nested_and_launches_as_before(self):
+        """DS-62: holding a checkout (and so its convention root) is not nesting — refusing it forbids roots like a whole projects folder, which WS26 keeps."""
+        other = self.root / "other"
+        self.given_repo(other)
+        self.given_owner_repos(self.repo, other)
+        self.given_declaration({str(self.repo): self.entry(root=str(self.root))})
+        worktree = self.root / SESSION
+        self.given_briefed(worktree=worktree)
+
+        code, out = self.plan()
+
+        self.assertEqual(code, 0, out)
+        self.assertIn("worktree add -b %s %s %s" % (SHAPE_BRANCH, worktree, self.base), out)
+        self.assertFalse(worktree.exists())
+        self.assertEqual(self.worktree_adds(), [])
+
+    def test_launcher__an_entry_repos_does_not_list_still_refuses_the_root_that_holds_its_root(self):
+        """DS-63: every other entry with a text `root` counts, trusted or not, well-formed or not — skipping it lets a key nobody launches from hide a nested root."""
+        outer = self.root / "wt"
+        (outer / "inner").mkdir(parents=True)
+        absent = self.root / "repos" / "absent"
+        entries = {"a well-formed entry": {"root": str(outer / "inner"), "branch": OTHER_SHAPE_BRANCH},
+                   "an entry with a dir key and no branch": {"root": str(outer / "inner"), "dir": "x"}}
+        for what, theirs in entries.items():
+            with self.subTest(what):
+                self.given_declaration({str(self.repo): self.entry(root=str(outer)), str(absent): theirs})
+                self.given_briefed(worktree=outer / SESSION)
+
+                code, out = self.launch("--yes")
+
+                self.assert_refused_before_git(code, out, ENTRY_REFUSAL, outer / SESSION)
+                self.assertIn(str(absent), out)
+
+    def test_launcher__an_entry_whose_root_is_not_text_nests_nothing_and_the_other_launches_as_before(self):
+        """DS-64: a `root` that is no text is no root to nest — reading it as one refuses a well-formed entry, or crashes the check."""
+        self.given_shared_root()
+        self.given_roots(str(self.shared_root), 7)
+        self.given_briefed(worktree=self.shared_worktree)
+
+        code, out = self.plan()
+
+        self.assertEqual(code, 0, out)
+        self.assertIn("worktree add -b %s %s %s" % (SHAPE_BRANCH, self.shared_worktree, self.base), out)
+        self.assertFalse(self.shared_worktree.exists())
+        self.assertEqual(self.worktree_adds(), [])
+
+    def test_launcher__an_entry_whose_root_is_not_text_refuses_its_own_repositorys_launch_by_name(self):
+        """DS-65: that entry is still malformed for its own repository, as DS-19 — skipped for nesting must not mean skipped."""
+        self.given_shared_root()
+        self.given_roots(str(self.shared_root), 7)
+        worktree = self.shared_root / "inner" / SESSION
+        self.given_briefed(worktree=worktree, branch=OTHER_BRANCH, base=self.other_base)
+
+        code, out = self.launch("--yes")
+
+        self.assert_refused_before_git(code, out, ENTRY_REFUSAL, worktree)
+        self.assertIn(str(self.other), out)
+
 
 class ShapeApiTests(LauncherCase):
     """DS-38 to DS-43 (BEHAVIORS.md): role_grants' derivation called in this process, as rw-git and the dashboard will
@@ -3561,6 +3875,18 @@ class ShapeApiTests(LauncherCase):
     given_repo = DeclaredShapeTests.given_repo
     entry = DeclaredShapeTests.entry
     given_declaration = DeclaredShapeTests.given_declaration
+    given_shared_root = DeclaredShapeTests.given_shared_root
+    shared_entries = DeclaredShapeTests.shared_entries
+    given_roots = DeclaredShapeTests.given_roots
+    given_nested_root = DeclaredShapeTests.given_nested_root
+
+    def assert_entry_refused(self, grants, repo, *named):
+        """shape_of(`repo`) raises EntryRefused — the malformed-entry refusal every tool reads by name — whose text
+        carries "`worktrees` entry for", `repo` and each of `named`."""
+        with self.assertRaises(grants.EntryRefused) as caught:
+            grants.shape_of(str(repo), [str(self.repo), str(self.other)])
+        for words in (ENTRY_REFUSAL, str(repo), *named):
+            self.assertIn(words, str(caught.exception))
 
     def test_names_of__a_slug_name_on_an_install_with_no_ticket_shape_has_no_split(self):
         """DS-38: with no ticket_regex a name is a slug, whole — a split here would invent a {ticket} the install has no shape for."""
@@ -3609,6 +3935,109 @@ class ShapeApiTests(LauncherCase):
         self.assertEqual(grants.place_of(str(self.repo), SESSION, [str(self.repo)]),
                          (str(self.home / "worktrees" / SESSION), SHAPE_BRANCH))
 
+    def test_shape_of__two_entries_declaring_the_same_root_both_keep_it(self):
+        """DS-57: equal roots are a shared root, not a nested one — read as nested, every repository sharing one root is refused. Guards the nesting check against refusing equal roots."""
+        self.given_shared_root()
+        grants = in_process_grants(self)
+        trusted = [str(self.repo), str(self.other)]
+
+        first = grants.shape_of(str(self.repo), trusted)
+        second = grants.shape_of(str(self.other), trusted)
+
+        self.assertEqual((first.root, second.root), (str(self.shared_root), str(self.shared_root)))
+
+    # ------------------------------------------------------------ nested roots (worktree-shape-002 U2)
+
+    def test_shape_of__a_root_strictly_inside_another_entrys_refuses_both_entries_each_naming_the_other(self):
+        """DS-60: each nested entry is an EntryRefused naming the other, in either order — a bare Refused stops every repository's launch, and an answer that hangs on entry order changes with an edit to launch.json."""
+        self.given_nested_root()
+        grants = in_process_grants(self)
+        cases = (("repo's entry first", False, self.repo, self.other),
+                 ("repo's entry first", False, self.other, self.repo),
+                 ("other's entry first", True, self.repo, self.other),
+                 ("other's entry first", True, self.other, self.repo))
+        for what, other_first, refused, named in cases:
+            with self.subTest(what, refused=refused.name):
+                self.given_roots(str(self.shared_root), str(self.inner_root), other_first)
+
+                self.assert_entry_refused(grants, refused, str(named))
+
+    def test_shape_of__a_root_spelled_in_other_letter_case_inside_its_root_still_refuses_the_entry(self):
+        """DS-66: letter case never separates two spellings of one folder — compared as text, `<root>/WT/inner` hides inside `<root>/wt` on a volume that folds case. Runs only where the scratch volume folds case (probed: `<root>/WT` is `<root>/wt`); skipped elsewhere, where they are two folders."""
+        self.given_nested_root()
+        folded = self.root / "WT"
+        if not (folded.exists() and os.path.samefile(folded, self.shared_root)):
+            self.skipTest("the scratch volume tells WT from wt, so the two spellings name two folders")
+        self.given_roots(str(self.shared_root), str(folded / "inner"))
+        grants = in_process_grants(self)
+
+        self.assert_entry_refused(grants, self.repo, str(self.other))
+
+    def test_shape_of__a_root_two_folders_inside_another_entrys_refuses_both_entries(self):
+        """DS-67: inside is any parent folder, not only the nearest — checking the parent alone lets a root two folders down through."""
+        self.given_shared_root()
+        deeper = self.shared_root / "inner" / "deeper"
+        deeper.mkdir(parents=True)
+        self.given_roots(str(self.shared_root), str(deeper))
+        grants = in_process_grants(self)
+        for refused, named in ((self.repo, self.other), (self.other, self.repo)):
+            with self.subTest(refused=refused.name):
+                self.assert_entry_refused(grants, refused, str(named))
+
+    def test_shape_of__a_sibling_root_whose_name_begins_with_another_entrys_root_is_not_nested(self):
+        """DS-68: `<root>/wt2` is beside `<root>/wt`, not in it — a prefix compare of the spellings refuses two unrelated entries."""
+        self.given_shared_root()
+        sibling = self.root / "wt2"
+        sibling.mkdir()
+        self.given_roots(str(self.shared_root), str(sibling))
+        grants = in_process_grants(self)
+        trusted = [str(self.repo), str(self.other)]
+
+        first = grants.shape_of(str(self.repo), trusted)
+        second = grants.shape_of(str(self.other), trusted)
+
+        self.assertEqual((first.root, second.root), (str(self.shared_root), str(sibling)))
+
+    def test_shape_of__a_root_reached_through_a_link_inside_its_root_still_refuses_the_entry(self):
+        """DS-69: the other root is compared where it really is — compared as spelled, a link above it hides a nested root."""
+        self.given_nested_root()
+        link = self.root / "wt-link"
+        link.symlink_to(self.shared_root)
+        self.given_roots(str(self.shared_root), str(link / "inner"))
+        grants = in_process_grants(self)
+
+        self.assert_entry_refused(grants, self.repo, str(self.other))
+
+    def test_shape_of__another_entrys_root_that_is_itself_a_link_into_its_root_still_refuses_the_entry(self):
+        """DS-72: the other root is resolved before its parents are walked — walked as spelled, a root that is a link to a folder inside this root has parents outside it."""
+        self.given_nested_root()
+        alias = self.root / "wt-alias"
+        alias.symlink_to(self.inner_root)
+        self.given_roots(str(self.shared_root), str(alias))
+        grants = in_process_grants(self)
+
+        self.assert_entry_refused(grants, self.repo, str(self.other))
+
+    def test_shape_of__a_home_relative_root_inside_its_root_still_refuses_the_entry(self):
+        """DS-70: the other root is `~/`-expanded first — left as written, `~/wt/inner` is a relative spelling that is inside nothing."""
+        self.given_shared_root()
+        home_root = self.home / "wt"
+        (home_root / "inner").mkdir(parents=True)
+        self.given_roots(str(home_root), "~/wt/inner")
+        grants = in_process_grants(self)
+
+        self.assert_entry_refused(grants, self.repo, str(self.other))
+
+    def test_shape_of__roots_that_do_not_exist_yet_nested_one_inside_the_other_refuse_both_entries(self):
+        """DS-71: a root git has not made yet still nests — comparing only folders that exist lets both through until the first worktree is made."""
+        self.given_shared_root()
+        later = self.root / "later"
+        self.given_roots(str(later), str(later / "inner"))
+        grants = in_process_grants(self)
+        for refused, named in ((self.repo, self.other), (self.other, self.repo)):
+            with self.subTest(refused=refused.name):
+                self.assert_entry_refused(grants, refused, str(named))
+
 
 class DeclaredDirectTests(LauncherCase):
     """DS-29 to DS-32 (BEHAVIORS.md): DL's fixture and helpers, borrowed so the DL tests do not run twice, with the brief's
@@ -3622,6 +4051,7 @@ class DeclaredDirectTests(LauncherCase):
     worktree_adds = DirectLaunchTests.worktree_adds
     repository_calls = DirectLaunchTests.repository_calls
     assert_refused = DirectLaunchTests.assert_refused
+    given_repo = DeclaredShapeTests.given_repo
 
     def setUp(self):
         DirectLaunchTests.setUp(self)
@@ -3677,6 +4107,27 @@ class DeclaredDirectTests(LauncherCase):
         code, out = self.direct("--dry-run", base=off)
 
         self.assert_refused(code, out, "is not an ancestor of main")
+
+    def test_direct__a_root_nested_with_another_entrys_root_is_refused_by_name_before_git(self):
+        """DS-61: --direct reads the shape through the same check, whichever of the two roots is its own — a direct build at a nested root puts a worktree among another repository's."""
+        other = self.root / "other"
+        self.given_repo(other)
+        self.given_owner_repos(self.repo, other)
+        outer = self.root / "wt"
+        inner = outer / "inner"
+        inner.mkdir(parents=True)
+        cases = {"its root holds the other's": (outer, inner), "its root is inside the other's": (inner, outer)}
+        for what, (root, other_root) in cases.items():
+            with self.subTest(what):
+                worktrees = {str(self.repo): {"root": str(root), "branch": "me/{ticket}/{slug}", "base": "main"},
+                             str(other): {"root": str(other_root), "branch": OTHER_SHAPE_BRANCH, "base": "main"}}
+                self.given_launch_json(dict(LAUNCH_CONFIG, unit=SHAPE_UNIT, projects_root=str(self.projects),
+                                            worktrees=worktrees))
+                self.log.write_text("")
+
+                code, out = self.direct("--dry-run")
+
+                self.assert_refused(code, out, ENTRY_REFUSAL, before_git=True)
 
 
 class UnitNameVectorTests(LauncherCase):

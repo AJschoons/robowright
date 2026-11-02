@@ -56,7 +56,10 @@ other context. A section that does not apply says `None on this machine.` — it
    `{session}` or `{slug}`, and may name `{ticket}`; `{ticket}` and `{slug}` split the session
    directory's name by `unit.ticket_regex` as the launcher splits it, so an install with no
    `ticket_regex` uses `{session}` only. Optional `base` is a local branch `base_sha` must be an
-   ancestor of. With no entry a repository keeps the convention, `<repo>/.worktrees/<session>` on
+   ancestor of. Two repositories may declare one `root`: a place their shapes both give
+   belongs to the one whose checkout folder name equals `run.json.repo`, and no match, more than
+   one, or no `repo` refuses by name; a place only one shape gives ignores `repo`. A `root` strictly
+   inside another entry's `root` refuses both entries by name. With no entry a repository keeps the convention, `<repo>/.worktrees/<session>` on
    `robowright/<session>`. A malformed entry refuses, by name, that repository alone; `worktrees`
    that is not an object refuses every one. Its optional `push_remotes`, shaped the same, maps a
    repository path to the remote names, each one plain segment, `rw-git push --remote` may push

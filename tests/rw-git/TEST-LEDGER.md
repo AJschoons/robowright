@@ -571,3 +571,13 @@ Gate 1 (F2, F3) added WS26 and WS27, each red at `03cb56e` before the fix, which
 (`launch-config` for `me/{ticket}/{slug}`, `kind: managed sample` for `me/{session}`), WS27 `launch-config: the branch
 robowright/v1..2 … is not a branch name git accepts`. The fix sets a slug only for a linked worktree and holds only a
 declared branch to `check-ref-format`.
+
+## Nested roots (worktree-shape-002 U2)
+
+WS28 was red before the nesting check (`0 != 2 : rw-git ('add', 'f'): exit 0`, both subtests). It ran in the launcher
+suite's U2 rounds (`tests/run-launch/TEST-LEDGER.md` → Nested roots).
+
+| # | Mutation | Predicted to fail | Observed | Verdict |
+|---|---|---|---|---|
+| NR-M6b | `owned_root` drops the "strictly inside another's" direction | WS28 [other] | WS28 [other] | KILLED |
+| NR-M6 + NR-M11 | drops the "holds" direction; the other raise is a bare `Refused` | WS28 [sample] | WS28 [sample], and WS28 [other]: the bare `Refused` text names no repository | KILLED; wrong prediction on [other] |
