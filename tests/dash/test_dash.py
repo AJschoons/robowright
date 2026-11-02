@@ -8136,5 +8136,125 @@ class DeclaredShapeDirectBuild(DashScratch):
         self.assert_unit_reads("with the Lead")
 
 
+class GoneCaseOwnEvidence(DashScratch):
+    """WSD21–WSD25 (worktree-shape-003 U2) — in the gone case only the repositories the session's project names are
+    evidence that its branch is in main; a trusted repository it does not name, holding the branch its own shape gives
+    the session, is a veto and never evidence. The launched rows use `DeclaredShapeInMain`'s fixture and the probe
+    `DeclaredShapeDirectBuild`'s, their helpers borrowed unedited."""
+
+    assert_unit_reads = InMainTruth.assert_unit_reads
+    given_declared_repo = DeclaredShapeInMain.given_declared_repo
+    gone_place = DeclaredShapeInMain.gone_place
+    given_shaped_session = DeclaredShapeInMain.given_shaped_session
+    given_branch_ahead_of_main = DeclaredShapeInMain.given_branch_ahead_of_main
+    given_second_trusted_repo = DeclaredShapeInMain.given_second_trusted_repo
+    given_declared_direct_build = DeclaredShapeDirectBuild.given_declared_direct_build
+    given_change_description = InMainTruth.given_change_description
+    given_record = DirectAccept.given_record
+    rev = DirectAccept.rev
+
+    # ------------------------------------------------------------ given
+
+    def given_merged_into_main(self, repo, branch):
+        """`branch` fast-forwarded into `repo`'s main, as an accept leaves it: main's tip is the branch's own commit."""
+        self.git(repo, "merge", "-q", "--ff-only", branch)
+
+    def given_second_own_repo(self):
+        """`<scratch>/repos/second`, which project `sample` names beside its first repository, listed in `repos` and
+        declared like it (root `<scratch>/second-worktrees`, the fixture's branch and base), holding `me/SMPL-482/x`
+        one commit ahead of its main."""
+        second = self.base / "repos" / "second"
+        second.mkdir(parents=True)
+        self.git(second, "init", "-q", "-b", "main")
+        self.git(second, "commit", "-q", "--allow-empty", "-m", "base")
+        self.given_branch_ahead_of_main(second, SHAPED_BRANCH)
+        self.given_settings(self.folder, "robowright.json", {"repos": [{"name": "sample", "path": str(self.repo)},
+                                                                        {"name": "second", "path": str(second)}]})
+        settings = json.loads(self.launch_json.read_text())
+        settings["repos"].append(str(second))
+        root = self.base / "second-worktrees"
+        root.mkdir()
+        settings["worktrees"][str(second)] = {"root": str(root), "branch": SHAPE_BRANCH, "base": "main"}
+        self.given_launch_settings(**settings)
+        return second
+
+    def given_build_torn_down(self):
+        """What teardown does after an accept: the direct build's worktree removed, then its branch deleted."""
+        self.git(self.repo, "worktree", "remove", "--force", str(self.worktree))
+        self.git(self.repo, "branch", "-D", DIRECT_BRANCH)
+
+    def given_other_repo_with_the_builds_branch(self):
+        """`<scratch>/repos/other`, which only project `other` names, listed in `repos` and declared (root
+        `<scratch>/other-worktrees`, branch `me/{session}`, base `main`), so its own shape's branch for the build is
+        `me/sample-001-first`; holding that branch one commit ahead of its main, a commit `sample`'s repository never has."""
+        other_project = self.given_project(name="other")
+        other = self.base / "repos" / "other"
+        other.mkdir(parents=True)
+        self.git(other, "init", "-q", "-b", "main")
+        self.git(other, "commit", "-q", "--allow-empty", "-m", "base")
+        self.given_branch_ahead_of_main(other, DIRECT_BRANCH)
+        self.given_settings(other_project, "robowright.json", {"repos": [{"name": "other", "path": str(other)}]})
+        settings = json.loads(self.launch_json.read_text())
+        settings["repos"].append(str(other))
+        root = self.base / "other-worktrees"
+        root.mkdir()
+        settings["worktrees"][str(other)] = {"root": str(root), "branch": "me/{session}", "base": "main"}
+        self.given_launch_settings(**settings)
+        return other
+
+    # ------------------------------------------------------------ another project's repository is a veto
+
+    def test_reads_a_declared_session_awaiting_acceptance__when_only_a_repository_its_project_does_not_name_holds_its_branch_merged(self):
+        """WSD21 — the branch gone from `sample`'s repository while `other`'s, which project `sample` does not name, holds `me/SMPL-482/x` merged into its own main, the worktree gone: awaiting acceptance — another project's accepted session of the same name lands this one's work unseen."""
+        self.given_declared_repo(merged=False)
+        self.git(self.repo, "branch", "-D", SHAPED_BRANCH)
+        other = self.given_second_trusted_repo(SHAPED_BRANCH, declared=True)
+        self.given_merged_into_main(other, SHAPED_BRANCH)
+        self.given_shaped_session(self.gone_place())
+
+        self.assert_unit_reads("awaiting acceptance")
+
+    def test_reads_a_declared_session_awaiting_acceptance__when_its_own_repositorys_branch_is_unmerged_and_another_projects_repository_holds_it_merged(self):
+        """WSD22 — `me/SMPL-482/x` unmerged in `sample`'s repository and merged into the main of `other`'s, which project `sample` does not name, the worktree gone: awaiting acceptance — another project's merge outvotes the session's own unaccepted branch, which teardown then deletes."""
+        self.given_declared_repo(merged=False)
+        other = self.given_second_trusted_repo(SHAPED_BRANCH, declared=True)
+        self.given_merged_into_main(other, SHAPED_BRANCH)
+        self.given_shaped_session(self.gone_place())
+
+        self.assert_unit_reads("awaiting acceptance")
+
+    # ------------------------------------------------------------ the own repositories are the evidence
+
+    def test_reads_a_declared_session_complete__when_its_own_repositorys_branch_is_merged_and_another_projects_repository_holds_it_unmerged(self):
+        """WSD23 — `me/SMPL-482/x` merged in `sample`'s repository and unmerged in `other`'s, which project `sample` does not name, the worktree gone: complete — an accepted session waits on another project's unrelated branch forever."""
+        self.given_declared_repo(merged=True)
+        self.given_second_trusted_repo(SHAPED_BRANCH, declared=True)
+        self.given_shaped_session(self.gone_place())
+
+        self.assert_unit_reads("complete")
+
+    def test_reads_a_declared_session_complete__when_one_of_its_projects_repositories_holds_its_branch_merged_and_another_unmerged(self):
+        """WSD24 — project `sample` naming two declared repositories, `me/SMPL-482/x` unmerged in the first and merged into the second's main, the worktree gone: complete — a session accepted in one of its project's repositories waits on a stale same-named branch in another."""
+        self.given_declared_repo(merged=False)
+        second = self.given_second_own_repo()
+        self.given_merged_into_main(second, SHAPED_BRANCH)
+        self.given_shaped_session(self.gone_place())
+
+        self.assert_unit_reads("complete")
+
+    # ------------------------------------------------------------ the accept record probe (A2)
+
+    def test_reads_a_torn_down_declared_direct_build_with_the_lead__when_another_projects_repository_holds_its_branch_merged_without_its_accepted_commit(self):
+        """WSD25 — the direct build fast-forwarded into `sample`'s main, `ACCEPTED.json` naming that tip, then torn down, while `other`'s repository holds `me/sample-001-first` merged into a main that lacks the recorded commit: with the Lead — a same-named branch merged in another project's repository reads as this build's accept (assumed Q2)."""
+        self.given_declared_direct_build()
+        self.given_merged_into_main(self.repo, DIRECT_BRANCH)
+        self.given_record(self.rev("rev-parse", "main"))
+        self.given_build_torn_down()
+        other = self.given_other_repo_with_the_builds_branch()
+        self.given_merged_into_main(other, DIRECT_BRANCH)
+
+        self.assert_unit_reads("with the Lead")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1301,3 +1301,54 @@ fails on its assertion.
 WSD19's three tests guard against reading a shared root's session in the other repository; none needs a dashboard change.
 
 WSD20: the second repository holds no branch for the session, so R3 alone cannot make it read `awaiting acceptance`; only the nesting does.
+
+### Own repositories are the evidence (worktree-shape-003 U2)
+
+Written before the code, from the shared-root follow-ups brief: Goal item 2, Language ("Gone case", "Own
+repositories", "Holders", "Veto, not evidence"), D4 and its table, D5, D7, D8, A2, A3, A8, U2 checks 1–6 and the
+`has_reached_main` hotspot. The gone case after U2, with the worktree gone and every own repository answering:
+
+| Own repositories hold the branch | A non-own repository holds its own shape's branch | Reads |
+|---|---|---|
+| yes, merged in one of them | any | in main |
+| yes, none merged | any | not in main |
+| no | yes, merged or not | not in main |
+| no | no | in main (as today) |
+
+Fixture (`GoneCaseOwnEvidence`): `DeclaredShapeInMain`'s and `DeclaredShapeDirectBuild`'s, their helpers borrowed
+unedited. "Other's repository" is `given_second_trusted_repo(me/SMPL-482/x, declared)`: `<scratch>/repos/other`, which
+only project `other` names, declared with the fixture's branch, so its own shape's branch for `SMPL-482-x` is
+`me/SMPL-482/x` too. "Merged" there is a fast-forward of that branch into its main (`given_merged_into_main`), since
+the helper leaves it one commit ahead. "Own branch deleted" is `branch -D` after `given_declared_repo`, as WSD7 does.
+"A second own repository" is `<scratch>/repos/second`, which project `sample` names beside its first, declared like it
+(root `<scratch>/second-worktrees`). The probe's other repository is `<scratch>/repos/other`, which only project `other`
+names, declared with branch `me/{session}`, so its own shape's branch for the build is `me/sample-001-first`.
+
+Rules:
+- R10 — In the gone case, an own repository holding the session's branch merged into its main puts the session in
+  main, whatever any other repository holds (D4 row 1).
+- R11 — When own repositories hold the branch and none has it merged, the session is not in main, whatever any other
+  repository holds (D4 row 2).
+- R12 — A repository the project does not name that holds the branch its own shape gives the session is a veto, never
+  evidence: with no own holder, the session is not in main whether that branch is merged or not (D4 row 3).
+- R13 — With no holder anywhere, the session reads in main, as today (D4 row 4). WSD7 pins the declared case, so U2
+  check 4 adds no row.
+- R14 — A direct build's accept record is not read as accepted on the strength of a same-named branch merged into
+  another project's repository whose main lacks the recorded commit (A2; probed, not changed).
+
+WSD25 is assumed in its Given (Q2 in the unit's evidence): the recorded commit is the build's own change on `sample`'s
+main, the strongest record the fixture can hold. Its Then is U2 check 6's.
+
+| # | Rule | Given | When | Then | Expected value from | Test |
+|---|---|---|---|---|---|---|
+| WSD21 | R12 | gone; own branch deleted; other's repository holding `me/SMPL-482/x` merged into its main | `sample` | U1 reads `awaiting acceptance` | U2-1: "a non-own merged branch is a veto, not evidence … → U1 reads `awaiting acceptance`"; D4 row 3 "no / yes, merged or not / not in main" | `GoneCaseOwnEvidence.test_reads_a_declared_session_awaiting_acceptance__when_only_a_repository_its_project_does_not_name_holds_its_branch_merged` |
+| WSD22 | R11 | gone; `me/SMPL-482/x` unmerged in `sample`'s repository; other's repository holding it merged into its main | `sample` | U1 reads `awaiting acceptance` | U2-2: "Own unmerged, other merged → `awaiting acceptance`"; D4 row 2 "yes, none merged / any / not in main" | `GoneCaseOwnEvidence.test_reads_a_declared_session_awaiting_acceptance__when_its_own_repositorys_branch_is_unmerged_and_another_projects_repository_holds_it_merged` |
+| WSD23 | R10 | gone; `me/SMPL-482/x` merged in `sample`'s repository; other's repository holding it unmerged | `sample` | U1 reads `complete` | U2-3: "Own merged, other unmerged → `complete` (D4 row 1)". Green at red; owes a kill (every holder must be merged) | `GoneCaseOwnEvidence.test_reads_a_declared_session_complete__when_its_own_repositorys_branch_is_merged_and_another_projects_repository_holds_it_unmerged` |
+| WSD24 | R10 | gone; `me/SMPL-482/x` unmerged in `sample`'s first repository; a second own repository holding it merged into its main | `sample` | U1 reads `complete` | D4 row 1: "yes, merged in one of them / any / in main". Green at red; owes a kill (every own holder must be merged) | `GoneCaseOwnEvidence.test_reads_a_declared_session_complete__when_one_of_its_projects_repositories_holds_its_branch_merged_and_another_unmerged` |
+| WSD25 | R14 | the declared direct build, `me/sample-001-first` fast-forwarded into `sample`'s main, `ACCEPTED.json` naming that main's tip, then torn down (worktree removed, branch deleted); other's repository holding `me/sample-001-first` merged into its main, which lacks the recorded commit | `sample` | U1 reads `with the Lead` | U2-6: "a direct build, worktree gone, `other` holding the same-named branch merged into its main, the recorded accept id absent from `other`'s main → not read as accepted"; not accepted and not in main is `with the Lead` (039-L1, WSD16). *Assumed* in its Given (Q2): the record names `sample`'s accepted commit | `GoneCaseOwnEvidence.test_reads_a_torn_down_declared_direct_build_with_the_lead__when_another_projects_repository_holds_its_branch_merged_without_its_accepted_commit` |
+| WSD26 | R13, R8 | every row of this file at `4ff60bc`, 039-L14, WSD7, WSD8, WSD9, WSD19, WSD20 and the `InMainCache` rows among them | the whole suite | every row passes; no existing test or fixture edited | U2-4: "No holder anywhere → `complete`, as today … the existing row that pins it is cited" (WSD7); U2-5: "Every row in `tests/dash/BEHAVIORS.md` at `4ff60bc` passes with no edit (D7) … The `verified` GONE cache rows in `InMainCache` pass with no edit (D5)". **Declared guard** | every test before `WSD21` |
+
+Expected at red (before the dashboard change; the caller runs it): WSD21, WSD22 and WSD25 fail reading `complete`,
+because today's `any` over every holder takes other's merged branch as evidence. WSD25 fails at red through
+`has_reached_main`; only after U2 does it read `is_accept_recorded` alone. WSD23 and WSD24 pass, and each owes its kill
+in `TEST-LEDGER.md`.

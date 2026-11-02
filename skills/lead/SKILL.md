@@ -505,7 +505,7 @@ missing worktree itself, as the Owner, on the launch after the dry run. It makes
 from `run.json.base_sha` at preflight; a refusal naming the shape, the branch or `base_sha` goes back to the Planner
 as a `run.json` fix, as does a tie-break refusal naming `run.json repo`. A standalone brief (a work order, or any brief with no project
 `robowright.json`) keeps the old shape: the worktree is the brief's `worktree` row, made the same way, and `repo` is
-not checked. It
+checked the same way, only at a place more than one repository's shape gives. It
 then checks the brief's `profile`, its `model`
 and `rotate_sessions` against the session's shape. A non-null brief-level `model` switches the run
 profile off for every unit: when any unit's `kind` is `tests`, `docs` or `refactor`, launch only

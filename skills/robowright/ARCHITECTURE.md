@@ -177,7 +177,7 @@ worktree, symlinks followed on both sides; `--dry-run` reports the same refusal.
 ## 5 · `run.json`, core and the plugin block
 
 `run.json` splits the same way as the layers (`../worker/templates/run.json`). Core owns every
-key but `device`. `repo` names the `robowright.json.repos` entry the session works in (§6).
+key but `device`. `repo` is the checkout folder name of the repository the session works in (§6).
 `platform` names the unit's plugin, `build_output` its build folder, and `locks: []` the lock
 names the plugins' §6 define — the launcher maps each to `<sessions root>/.<name>-lock` and
 refuses a second holder of any of them. `mcp` lists the MCP servers the launcher gives the

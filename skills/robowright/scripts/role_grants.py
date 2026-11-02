@@ -28,14 +28,15 @@ well-formed `repos` nothing is granted.
     role_grants.py worktree <session_dir> plan|make  make run.json's missing worktree, or say how a launch would: the
                                                      Lead's sandbox cannot write the repository's git directory
     role_grants.py worktree <session_dir> hint       the line that makes it by hand, from the repository's shape
-    role_grants.py shaped <worktree> <session_dir>   the trusted repository whose shape's root the worktree is directly in
+    role_grants.py shaped <worktree> <session_dir>   the trusted repository whose shape's root the worktree is directly in;
+                                                     exit 3 when it is in no declared root and no entry is refused
     role_grants.py direct <project> <repo> <slug> <base> <briefing> plan|make|grants|path
                                                      the same for a direct build, which has no run.json, from argv held
                                                      to the same checks; `grants` prints document's fragment once the
                                                      worktree, if it exists, is the build's; `path` the worktree's path
 
 stdout: the settings fragment, JSON, or one line per checkout or worktree. A refusal is `refused: <detail>` on stderr,
-exit 2.
+exit 2; `shaped`'s "in no declared root" is the same line with exit 3.
 """
 
 import json
@@ -54,6 +55,8 @@ import owner_git  # noqa: E402
 import session_write  # noqa: E402
 
 EXIT_REFUSED = 2
+# shaped: in no declared root, no entry refused; the launcher forgives it for a `worktrees` path.
+EXIT_IN_NO_ROOT = 3
 # The launcher's lock-name check: a name becomes one path segment under the sessions root.
 LOCK_NAME = re.compile(r"[a-z0-9-]+")
 # The launcher's TICKET_FORM: a depends_on session, or a session folder's name, becomes one path segment.
@@ -83,6 +86,10 @@ BRANCH_PREFIX = "robowright/"
 
 class Refused(Exception):
     pass
+
+
+class InNoRoot(Refused):
+    """shaped's worktree is directly in no trusted repository's root, and no repository's entry is out of shape."""
 
 
 def git(fn, *args):
@@ -1009,7 +1016,8 @@ def worktree_hint(session_dir: str) -> str:
 def shaped(worktree: str, session_dir: str) -> str:
     """The one repository owner_git trusts whose shape's root `worktree` lies directly in, at a root more than one
     repository declares the one `chosen` picks by the session's run.json `repo`, and which lists `worktree`; else
-    Refused, naming each trusted repository whose entry is out of shape, or each candidate."""
+    Refused, naming each trusted repository whose entry is out of shape, or each candidate. InNoRoot (exit 3) when no
+    repository's root holds it and no entry is out of shape."""
     named = run_json(session_folder(launch_config(), session_dir)).get("repo")
     trusted = owner_git.configured_repos()
     found, refused = [], []
@@ -1019,6 +1027,8 @@ def shaped(worktree: str, session_dir: str) -> str:
                 found.append(repo)
         except EntryRefused as refusal:
             refused.append(str(refusal))
+    if not found and not refused:
+        raise InNoRoot(f"{owner_git.shown(worktree)} is directly in no trusted repository's `worktrees` root")
     if not found:
         raise Refused(f"{owner_git.shown(worktree)} is directly in no trusted repository's `worktrees` root"
                       + "".join(f"; {owner_git.shown(why)}" for why in refused))
@@ -1197,9 +1207,12 @@ def main(args) -> int:
             owner_git.emit(sys.stdout, direct(args[1:]) + "\n")
         else:
             print("usage: role_grants.py worker <session_dir> <worktree> | document [<cwd>] | checkouts <session_dir> | "
-                  "worktree <session_dir> plan|make|hint | shaped <worktree> <session_dir> | "
+                  "worktree <session_dir> plan|make|hint | shaped <worktree> <session_dir> (exit 3: in no root) | "
                   "direct <project> <repo> <slug> <base> <briefing> plan|make|grants|path", file=sys.stderr)
             return 1
+    except InNoRoot as refusal:
+        owner_git.emit(sys.stderr, f"refused: {owner_git.shown(str(refusal))}\n")
+        return EXIT_IN_NO_ROOT
     except Refused as refusal:
         owner_git.emit(sys.stderr, f"refused: {owner_git.shown(str(refusal))}\n")
         return EXIT_REFUSED

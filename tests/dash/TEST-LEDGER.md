@@ -966,3 +966,30 @@ WSD20 was red before the nesting check (`complete · 482` for `awaiting acceptan
 rounds (`tests/run-launch/TEST-LEDGER.md` → Nested roots). NR-M6, which drops the "holds another's root" direction,
 reddened it as predicted: sample's entry, which holds `other`'s root, reads as well-formed again. Under NR-M6b and
 the other rounds it stayed green, as predicted. KILLED.
+
+## Own repositories are the evidence (worktree-shape-003 U2)
+
+WSD21, WSD22 and WSD25 were red before the code, each on its Then (`complete` for `awaiting acceptance`, and for
+`with the Lead`). WSD23 and WSD24 were green at red, as predicted, and each owed a kill. Whole suite per round, kill
+sets predicted in writing first; two rounds; `tools/robowright-dash.py` restored after each (`git status --short`
+empty). WSD26 is the declared guard for every existing row (U2 checks 4 and 5).
+
+| # | Mutation | Predicted | Observed | Verdict |
+|---|---|---|---|---|
+| WSDM-F | the own holders must all be merged (`any` → `all`) | WSD24 | WSD24 | KILLED |
+| WSDM-G | the veto dropped: no own holder reads in main | WSD21 WSD25, maybe WSD8 WSD9 039-L14 | WSD21 WSD25 WSD8 WSD9 039-L14, and two `InMainCache` rows | KILLED; wrong prediction: the two cache rows, where a repository that could not answer must not be read as gone |
+| WSDM-H | every holder, own or not, must be merged | WSD23 (corrected before the run: and WSD24) | WSD23 WSD24 | KILLED |
+
+WSDM-F and WSDM-G ran together on disjoint statements: F changes a reading only with two or more own holders, which
+only WSD24 has.
+
+The `is_accept_recorded` probe (U2 check 6) is WSD25, kept as a test. Two findings, recorded with no change (A2):
+
+- WSD25's Given is a direct build really accepted into `sample`'s main and then torn down. With `other` holding the
+  same-named branch merged, it reads `with the Lead`: `on_main` ranges over the holders, `other` alone, whose main
+  lacks the recorded commit. So a collision costs a recorded direct build its accept too, not only a hand-integrated
+  session.
+- Traced, not run: `on_main` ranges over `holders or repos`, so it reads a non-own holder's main. An `ACCEPTED.json`
+  naming `other`'s main tip, where `other`'s same-named branch was fast-forwarded into it, matches `is_change_of`, and
+  the build reads `complete` with nothing for it in `sample`'s repository. U2's veto in `has_reached_main` does not
+  reach it: `in_main_slugs` ORs the two readings.

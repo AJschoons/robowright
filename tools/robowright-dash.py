@@ -789,10 +789,12 @@ def is_branch_in_main(repo: str, branch: str, trusted: list) -> bool:
 
 
 def has_reached_main(session: dict, listed: dict, trusted: list, verified: dict | None) -> bool:
-    """A finished session's branch is in main, read in its listed worktree or in the trusted repository that holds the
-    branch; or each trusted repository's own shape's branch is gone from it while its project names at least one trusted
-    repository and each of those answers, and no worktree of it is left on disk, since teardown deletes the branch only after an accept. A missing
-    worktree alone says nothing."""
+    """A finished session's branch is in main, read in its listed worktree; or, with no worktree of it left on disk,
+    while its project names at least one trusted repository and each of those answers: in one of the project's
+    repositories that holds its own shape's branch, or, when none holds it, with that branch gone from every trusted
+    repository, since teardown deletes the branch only after an accept. A repository the project does not name can veto
+    the gone reading by holding its own shape's branch, but is never evidence of main. A missing worktree alone says
+    nothing."""
     worktree = session["run"].get("worktree")
     is_path = isinstance(worktree, str) and bool(worktree)
     checked = listed_worktree(worktree, listed) if is_path else None
@@ -812,7 +814,11 @@ def has_reached_main(session: dict, listed: dict, trusted: list, verified: dict 
     # Held only when every trusted repository answered: one that could not may hold the branch.
     if not holders and verified is not None and None not in held.values():
         verified[session["slug"]] = GONE
-    return any(is_branch_in_main(repo, branches[repo], trusted) for repo in holders) if holders else True
+    own_holders = [repo for repo in holders if repo in own]
+    if own_holders:
+        return any(is_branch_in_main(repo, branches[repo], trusted) for repo in own_holders)
+    # Another project's repository may hold a same-named branch of its own: a veto, never evidence.
+    return not holders
 
 
 def in_main_slugs(sessions: list, verified: dict | None) -> set:

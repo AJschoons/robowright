@@ -13,7 +13,7 @@ command, a test target, a device, an artifact id, or a repository convention liv
    `git remote get-url origin`. For a repository that cannot carry the file itself.
 
 In a project that spans several repositories, `robowright.json.repos[].path` picks the checkout the
-Lead branches a worktree from. It does not change how a Worker resolves its hook: the Worker
+launcher makes a worktree from. It does not change how a Worker resolves its hook: the Worker
 resolves the worktree it runs in, by the order above.
 
 **No hook → the Worker refuses to start**, naming both paths it looked at. It never guesses a

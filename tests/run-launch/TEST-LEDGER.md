@@ -573,3 +573,26 @@ writing first, the scoped DS rows plus DS-46 and DS-57 were run, and the file wa
 DS-69 [a link above the other root] is a **declared guard**. It guards against comparing two roots by their spellings,
 with neither `realpath` nor `identity()`. No single compiling mutation reddens it, because either one alone catches it.
 DS-72 holds the `realpath` on its own.
+
+
+## The late check at any spelling (worktree-shape-003 U1)
+
+DS-75, DS-76, DS-77 and DS-82 were red against the base before the late check ran `shaped` everywhere (`FAILED
+(failures=4)`, every one an exit-code assertion); DS-73, DS-74, DS-78 to DS-81 and DS-83 to DS-85 were green there and
+owed a mutation. DS-86 is a declared guard: the pinned rows pass unedited. Two rounds over `run-launch.sh` and
+`role_grants.py`, the kill set predicted in writing before each, `DeclaredShapeTests` and `LateCheckOutsideRootsTests`
+run, both files restored after each (`git status --short` empty).
+
+| # | Mutation | Predicted to fail | Observed | Verdict |
+|---|---|---|---|---|
+| LC-M2 | exit 3 with no `worktrees` component is admitted | DS-81 | DS-81 | KILLED |
+| LC-M3 | `shaped` raises exit 3 even when an entry is refused (run with LC-M2) | DS-77, DS-84 | the same | KILLED |
+| LC-M4 | `shaped` returns the first candidate, skipping the tie-break (run with LC-M2, M3) | DS-75, DS-76, DS-83, DS-85 | the same, DS-54, DS-55, and DS-15 [the sessions root itself] | KILLED; wrong prediction: DS-15's subtest was not predicted, and the batch does not say which of the three reddened it |
+| LC-M1 | exit 3 is refused like exit 2, whatever the spelling | DS-78, DS-79, DS-80 | the same and DS-81 | KILLED; wrong prediction: DS-81 asserts R3.3's line, which the exit-2 line replaces |
+| LC-M5 | `chosen` picks the candidate `repo` does not name (run with LC-M1) | DS-73, DS-74, DS-75, DS-83, DS-85 | the same and the DS-46 to DS-56 rows that pick by `repo` (six) | KILLED |
+
+No survivors, no tests deleted.
+
+DS-87 and DS-88 were added for the U1 gate's F1, after the change: both were red at the unfixed tip (`FAILED
+(failures=2)`, each asserting no `refused:` line), which is their baseline kill. Green after the launcher held
+`shaped`'s stderr for its two refusing arms.

@@ -3117,6 +3117,11 @@ OLD_SHARED_REFUSAL = "more than one repository declares"
 # Nested roots (DS-58 to DS-72): the two orders launch.json may list the two entries in, keyed by
 # what each case is called; the value is given_roots' `other_first`.
 ENTRY_ORDERS = {"repo's entry first": False, "other's entry first": True}
+# The late check at any spelling (DS-73 to DS-85): the launcher's last line when `shaped` exits 2 carries
+# OWNER_RULES_REFUSAL and never MAIN_CLONE_REFUSAL, R3.3's line, which only exit 3 with no `worktrees` component prints.
+OWNER_RULES_REFUSAL = "refused by the Owner's worktree rules"
+MAIN_CLONE_REFUSAL = "never the main clone"
+GRANTS_TOOL = SCRIPTS / "role_grants.py"
 
 
 def in_process_grants(case):
@@ -3564,15 +3569,16 @@ class DeclaredShapeTests(LauncherCase):
 
     # ------------------------------------------------------------ a shared root (worktree-shape-002 U1)
 
-    def given_shared_root(self):
+    def given_shared_root(self, root=None):
         """`other` (`<root>/other`), a second trusted checkout, and both entries declaring the root `<root>/wt`: `repo`'s
         the fixture's (`me/{ticket}/{slug}`, base `main`), `other`'s `other/{session}` on base `trunk`, a branch only
         `other` holds, so a launch that reads one repository's shape for the other's worktree refuses on its base check.
-        The root has no `worktrees` component, so the launcher's late check reaches `shaped`."""
+        The root has no `worktrees` component, so the launcher's late check reaches `shaped`. `root`, when given, is the
+        shared root instead (DS-73 on: `<root>/worktrees/shared`)."""
         self.other = self.root / "other"
         self.other_base = self.given_repo(self.other)
         subprocess.run(GIT + ["branch", "trunk", self.other_base], cwd=self.other, check=True, capture_output=True)
-        self.shared_root = self.root / "wt"
+        self.shared_root = self.root / "wt" if root is None else root
         self.shared_root.mkdir()
         self.shared_worktree = self.shared_root / SESSION
         self.given_owner_repos(self.repo, self.other)
@@ -3864,6 +3870,237 @@ class DeclaredShapeTests(LauncherCase):
 
         self.assert_refused_before_git(code, out, ENTRY_REFUSAL, worktree)
         self.assertIn(str(self.other), out)
+
+    # ------------------------------------------------------------ the late check at any spelling (worktree-shape-003 U1)
+
+    def given_worktrees_spelled_shared_root(self):
+        """The shared-root fixture with its root at `<root>/worktrees/shared`: a path whose `worktrees` component
+        must not skip `shaped`."""
+        self.given_shared_root(root=self.shape_root / "shared")
+
+    def given_listed_worktree(self, checkout, worktree, branch, base, **fields):
+        """`worktree` made by hand in `checkout` on a new `branch` at `base`, so `checkout` lists it, and the session
+        implementing in it with a session id, plus `fields`; a `repo` not among them is absent."""
+        worktree.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(GIT + ["worktree", "add", "-q", "-b", branch, str(worktree), base], cwd=checkout, check=True,
+                       capture_output=True)
+        self.given_implementing(worktree=str(worktree), base_sha=base, unit_fields=({"branch": branch},),
+                                session_id=OLD_ID, **fields)
+        self.log.write_text("")
+
+    def given_convention_worktree_of_a_repository_declaring_another_root(self):
+        """`repo` declaring the root `<root>/wt`, and its worktree on the convention, `<root>/repo/.worktrees/SMPL-482-x`
+        on `robowright/SMPL-482-x`, made by hand. Returns the worktree."""
+        self.given_declaration({str(self.repo): self.entry(root=str(self.root / "wt"))})
+        worktree = self.repo / ".worktrees" / SESSION
+        self.given_listed_worktree(self.repo, worktree, "robowright/" + SESSION, self.base)
+        return worktree
+
+    def run_shaped(self, worktree):
+        """`role_grants.py shaped <worktree> <session dir>` as the launcher runs it, with the fixture's HOME and PATH:
+        (exit code, stdout, stderr)."""
+        done = subprocess.run([sys.executable, str(GRANTS_TOOL), "shaped", str(worktree), str(self.run_dir)],
+                              env=self.env, cwd=self.root, capture_output=True, text=True)
+        return done.returncode, done.stdout, done.stderr
+
+    def assert_refused_at_the_late_check(self, code, out, named, worktree):
+        """The late check's refusal of an existing worktree: exit 1 carrying `named`, with no git call run inside
+        `worktree`, no `worktree add`, no plan and no resume."""
+        self.assertEqual(code, 1, out)
+        self.assertIn(named, out)
+        self.assertEqual([call for call in git_calls(self.log) if runs_in(call, worktree)], [])
+        self.assertEqual(self.worktree_adds(), [])
+        self.assertNotIn("command:", out)
+        self.assertNotIn("--resume=%s" % OLD_ID, out)
+
+    def assert_refused_by_the_owners_rules(self, out, worktree):
+        """D3's last line when `shaped` exits 2: it names `worktree` and says the Owner's worktree rules refused it, and
+        no line calls the worktree the main clone."""
+        last = [line for line in out.splitlines() if line.strip()][-1]
+        self.assertIn(OWNER_RULES_REFUSAL, last)
+        self.assertIn(str(worktree), last)
+        self.assertNotIn(MAIN_CLONE_REFUSAL, out)
+
+    def test_launcher__the_late_check_admits_a_worktrees_spelled_shared_roots_worktree_of_the_repository_run_json_repo_names(self):
+        """DS-73: a resume at a shared root whose path holds a `worktrees` component passes the tie-break for the named repository — refused, such a session can never be resumed."""
+        self.given_worktrees_spelled_shared_root()
+        self.given_others_worktree_past_preflight(repo="other")
+
+        code, out = self.plan("--resume")
+
+        self.assertEqual(code, 0, out)
+        self.assertIn("--resume=%s" % OLD_ID, out)
+
+    def test_launcher__a_worktrees_spelled_shared_roots_worktree_of_the_repository_run_json_repo_names_is_started_where_it_is(self):
+        """DS-74: the admitted worktree is started in place, in the named repository — a new worktree, or the Worker in the other repository, edits work the brief did not plan (assumed Q3)."""
+        self.given_worktrees_spelled_shared_root()
+        self.given_others_worktree_past_preflight(repo="other")
+
+        argv, out = self.start("--resume")
+
+        self.assertTrue(argv, out)
+        self.assertEqual(self.worktree_adds(), [])
+        self.assertEqual(self.repository_of(self.shared_worktree), self.other)
+        self.assertEqual((self.shared_worktree / ".claude/autonomous-run").read_text().strip(), str(self.run_dir))
+
+    def test_launcher__the_late_check_refuses_a_worktrees_spelled_shared_roots_worktree_when_run_json_repo_names_the_other_candidate(self):
+        """DS-75: the tracer — at a `worktrees`-spelled shared root, `repo` naming the candidate that does not hold the worktree is refused on its own cause; admitted by spelling, the session runs in a repository its brief does not name (assumed Q1, Q2)."""
+        self.given_worktrees_spelled_shared_root()
+        self.given_others_worktree_past_preflight(repo="repo")
+
+        code, out = self.plan("--resume")
+
+        self.assert_refused_at_the_late_check(code, out, TIE_BREAK, self.shared_worktree)
+        self.assert_refused_by_the_owners_rules(out, self.shared_worktree)
+
+    def test_launcher__the_late_check_refuses_a_worktrees_spelled_shared_roots_worktree_when_run_json_repo_is_absent(self):
+        """DS-76: an absent `repo` picks no candidate at a `worktrees`-spelled shared root either — admitted, the session runs in whichever repository git lists (assumed Q1, Q2)."""
+        self.given_worktrees_spelled_shared_root()
+        self.given_others_worktree_past_preflight()
+
+        code, out = self.plan("--resume")
+
+        self.assert_refused_at_the_late_check(code, out, TIE_BREAK, self.shared_worktree)
+        self.assert_refused_by_the_owners_rules(out, self.shared_worktree)
+
+    def test_launcher__an_existing_worktree_one_level_below_a_declared_root_is_admitted_by_its_worktrees_component(self):
+        """DS-79: one level below a declared root is in no declared root, which the `worktrees` component forgives — refused, a worktree made by hand under a shared root can no longer be resumed."""
+        self.given_worktrees_spelled_shared_root()
+        self.given_listed_worktree(self.other, self.shared_root / "sub" / SESSION, OTHER_BRANCH, self.other_base,
+                                   repo="repo")
+
+        code, out = self.plan("--resume")
+
+        self.assertEqual(code, 0, out)
+        self.assertIn("--resume=%s" % OLD_ID, out)
+
+    def test_launcher__an_existing_convention_worktree_of_a_repository_declaring_another_root_is_admitted(self):
+        """DS-80: a `.worktrees` worktree whose repository now declares another root is in no declared root, which the component forgives — refused, every session made before the entry was written is stranded."""
+        self.given_convention_worktree_of_a_repository_declaring_another_root()
+
+        code, out = self.plan("--resume")
+
+        self.assertEqual(code, 0, out)
+        self.assertIn("--resume=%s" % OLD_ID, out)
+
+    def test_launcher__an_existing_worktree_in_no_declared_root_with_no_worktrees_component_is_refused_as_never_the_main_clone(self):
+        """DS-81: with no `worktrees` component, in no declared root is still refused with R3.3's line — admitted, a checkout anywhere a configured repository lists becomes a Worker's worktree."""
+        self.given_declaration(None)
+        worktree = self.root / "elsewhere" / SESSION
+        self.given_listed_worktree(self.repo, worktree, "robowright/" + SESSION, self.base)
+
+        code, out = self.plan("--resume")
+
+        self.assertEqual(code, 1, out)
+        self.assertIn(MAIN_CLONE_REFUSAL, out)
+        self.assertNotIn("--resume=%s" % OLD_ID, out)
+
+    def test_shaped__a_worktree_in_no_declared_root_with_no_entry_refused_exits_3_with_its_refused_line(self):
+        """DS-82: `shaped` tells "in no declared root" apart by exit code, not text — exit 2 here and the launcher cannot forgive it without matching refusal text."""
+        worktree = self.given_convention_worktree_of_a_repository_declaring_another_root()
+
+        code, stdout, stderr = self.run_shaped(worktree)
+
+        self.assertEqual(code, 3, stderr)
+        self.assertTrue(stderr.startswith("refused:"), stderr)
+        self.assertEqual(stdout, "")
+
+    def test_shaped__a_tie_break_refusal_at_a_shared_root_exits_2_naming_run_json_repo(self):
+        """DS-83: a tie-break refusal stays exit 2 — as exit 3, a `worktrees`-spelled path would forgive it."""
+        self.given_worktrees_spelled_shared_root()
+        self.given_others_worktree_past_preflight(repo="repo")
+
+        code, stdout, stderr = self.run_shaped(self.shared_worktree)
+
+        self.assertEqual(code, 2, stderr)
+        self.assertIn(TIE_BREAK, stderr)
+
+    def test_shaped__a_shared_roots_worktree_prints_the_repository_run_json_repo_names(self):
+        """DS-85: at a shared root `shaped` prints the candidate `repo` names and exits 0 — another candidate printed, the launcher admits a worktree for the wrong repository."""
+        self.given_worktrees_spelled_shared_root()
+        self.given_others_worktree_past_preflight(repo="other")
+
+        code, stdout, stderr = self.run_shaped(self.shared_worktree)
+
+        self.assertEqual(code, 0, stderr)
+        self.assertEqual(stdout.splitlines(), [str(self.other)])
+
+
+class LateCheckOutsideRootsTests(LauncherCase):
+    """DS-77, DS-78 and DS-84 (BEHAVIORS.md): the late check on the R rows' own fixture, an existing worktree
+    `<root>/worktrees/wt` of `repo` on the convention, with `other` trusted beside it and the only `worktrees` entry.
+    DeclaredShapeTests' helpers, borrowed so its launcher tests do not run twice."""
+
+    rev = WorktreeCreationTests.rev
+    worktree_adds = WorktreeCreationTests.worktree_adds
+    given_repo = DeclaredShapeTests.given_repo
+    run_shaped = DeclaredShapeTests.run_shaped
+    assert_refused_at_the_late_check = DeclaredShapeTests.assert_refused_at_the_late_check
+    assert_refused_by_the_owners_rules = DeclaredShapeTests.assert_refused_by_the_owners_rules
+
+    def setUp(self):
+        LauncherCase.setUp(self)
+        self.log = self.given_recording_git()
+        self.given_worktree()
+        self.other = self.root / "other"
+        self.given_repo(self.other)
+        self.given_owner_repos(self.root / "repo", self.other)
+
+    def given_other_entry(self, **changes):
+        """launch.json's `worktrees` holding `other`'s entry alone — root `<root>/elsewhere`, `other/{session}` on base
+        `main`, with `changes` added — and the session implementing in the fixture's worktree with a session id."""
+        elsewhere = self.root / "elsewhere"
+        elsewhere.mkdir(exist_ok=True)
+        entry = dict({"root": str(elsewhere), "branch": OTHER_SHAPE_BRANCH, "base": "main"}, **changes)
+        self.given_launch_json(dict(LAUNCH_CONFIG, worktrees={str(self.other): entry}))
+        self.given_implementing(session_id=OLD_ID)
+        self.log.write_text("")
+
+    def test_launcher__a_malformed_entry_refuses_an_existing_worktrees_spelled_worktree_in_no_declared_root_by_name(self):
+        """DS-77: no candidate with an entry refused is exit 2, which no spelling forgives — admitted, a malformed entry is read as if it declared nothing (assumed Q1, Q2, Q4)."""
+        self.given_other_entry(**MALFORMED["a dir key"])
+
+        code, out = self.plan("--resume")
+
+        self.assert_refused_at_the_late_check(code, out, ENTRY_REFUSAL, self.worktree)
+        self.assert_refused_by_the_owners_rules(out, self.worktree)
+
+    def test_launcher__an_existing_worktrees_spelled_worktree_in_no_declared_root_is_admitted_beside_a_well_formed_entry(self):
+        """DS-78: a `worktrees`-spelled worktree in no declared root is admitted — refused, every R-row session stops launching once any repository declares a root (assumed Q4)."""
+        self.given_other_entry()
+
+        code, out = self.plan("--resume")
+
+        self.assertEqual(code, 0, out)
+        self.assertIn("--resume=%s" % OLD_ID, out)
+
+    def test_launcher__an_admission_in_no_declared_root_prints_none_of_shapeds_refusal(self):
+        """DS-87: exit 3 admitted by its `worktrees` component is silent — printed, every R-row launch tells the Owner its worktree was refused."""
+        self.given_other_entry()
+
+        code, out = self.plan("--resume")
+
+        self.assertEqual(code, 0, out)
+        self.assertFalse([line for line in out.splitlines() if line.startswith("refused:")], out)
+
+    def test_launcher__with_no_worktrees_entry_a_worktrees_spelled_worktree_prints_none_of_shapeds_refusal(self):
+        """DS-88: with no `worktrees` entry the late check is the convention's: no refusal line — printed, every launch on the convention reads as a refusal."""
+        self.given_implementing(session_id=OLD_ID)
+
+        code, out = self.plan("--resume")
+
+        self.assertEqual(code, 0, out)
+        self.assertIn("--resume=%s" % OLD_ID, out)
+        self.assertFalse([line for line in out.splitlines() if line.startswith("refused:")], out)
+
+    def test_shaped__a_worktree_in_no_declared_root_beside_a_malformed_entry_exits_2_naming_the_entry(self):
+        """DS-84: no candidate with an entry refused stays exit 2 — as exit 3, a `worktrees`-spelled path would forgive a malformed entry (assumed Q4)."""
+        self.given_other_entry(**MALFORMED["a dir key"])
+
+        code, stdout, stderr = self.run_shaped(self.worktree)
+
+        self.assertEqual(code, 2, stderr)
+        self.assertIn(ENTRY_REFUSAL, stderr)
 
 
 class ShapeApiTests(LauncherCase):

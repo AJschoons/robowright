@@ -2,7 +2,7 @@
   "ticket": "<slug>",
   "project": null,
   "worktree": "<worktree path>",
-  "repo": "<repos[].name>",
+  "repo": "<checkout folder name>",
   "repo_origin": "<origin url>",
   "base_sha": "",
   "platform": null,

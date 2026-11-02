@@ -1384,13 +1384,22 @@ TOOLS="$(jq -r --arg lean "$LEAN_TOOLS" --arg known "$KNOWN_TOOLS" '
     elif (.tools | type) == "string" and (.tools | test("\\A[A-Za-z]+(,[A-Za-z]+)*\\z")) and ((.tools | split(",")) - ($known | split(",")) == []) then .tools
     else empty end' "$SESSION_DIR/run.json")"
 [ -n "$TOOLS" ] || fail "run.json 'tools' must be null or a comma-joined list of tool names from: $KNOWN_TOOLS"
-# Every worktree convention puts a worktrees/ or .worktrees/ component in the path, and a declared one sits directly
-# in its repository's `worktrees` root. The main clone does neither, and the .git-file test below is what actually
-# proves this is a linked worktree rather than a checkout that merely sits there.
-case "$WORKTREE" in
-    */worktrees/*|*/.worktrees/*) ;;
-    *) python3 "$GRANTS_TOOL" shaped "$WORKTREE" "$SESSION_DIR" >/dev/null \
-        || fail "worktree must live under a .worktrees/ or worktrees/ directory or a declared worktrees root, never the main clone: $WORKTREE" ;;
+# `shaped` classifies every existing worktree by the shapes, whatever its path spells: directly in a declared root it
+# gets the tie-break and the listing check. A worktrees/ or .worktrees/ component forgives only exit 3, in no declared
+# root with no entry refused, and silently. The .git-file test below proves a linked worktree.
+if SHAPED_REFUSAL="$(python3 "$GRANTS_TOOL" shaped "$WORKTREE" "$SESSION_DIR" 2>&1 >/dev/null)"; then
+    SHAPED_EXIT=0
+else
+    SHAPED_EXIT=$?
+fi
+shaped_refused() { [ -z "$SHAPED_REFUSAL" ] || printf '%s\n' "$SHAPED_REFUSAL" | show >&2; fail "$1"; }
+case "$SHAPED_EXIT" in
+    0) ;;
+    3) case "$WORKTREE" in
+           */worktrees/*|*/.worktrees/*) ;;
+           *) shaped_refused "worktree must live under a .worktrees/ or worktrees/ directory or a declared worktrees root, never the main clone: $WORKTREE" ;;
+       esac ;;
+    *) shaped_refused "worktree $WORKTREE is refused by the Owner's worktree rules (above)" ;;
 esac
 # run.json.worktree is session-written: git runs inside it only once a configured repository lists
 # it (owner_git.py prints the refusal), and then only with owner_git.py's overrides.
