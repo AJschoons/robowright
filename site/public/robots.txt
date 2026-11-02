@@ -1,0 +1,6 @@
+# Search engines, AI assistants and AI training: everything.
+User-agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=yes
+Allow: /
+
+Sitemap: https://robowright.dev/sitemap.xml

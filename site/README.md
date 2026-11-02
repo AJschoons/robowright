@@ -58,3 +58,11 @@ cp tests/out/hero-whiteprint-1280x800-reduce.png public/share.png
 ```
 
 The reduced-motion shot, because the hero blinks otherwise and a shot can catch a closed eye.
+
+## Search
+
+`public/robots.txt` allows every crawler, AI training included, and names `public/sitemap.xml`.
+Bump the sitemap's `<lastmod>` when the page's content changes. `index.html` carries the meta
+description, the canonical link and a schema.org `SoftwareSourceCode` block whose description
+repeats the meta description; change them together. `hero.html` is `noindex`: it exists only to
+draw the share image.
