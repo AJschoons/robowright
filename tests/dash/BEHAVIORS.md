@@ -1333,11 +1333,13 @@ Rules:
   evidence: with no own holder, the session is not in main whether that branch is merged or not (D4 row 3).
 - R13 — With no holder anywhere, the session reads in main, as today (D4 row 4). WSD7 pins the declared case, so U2
   check 4 adds no row.
-- R14 — A direct build's accept record is not read as accepted on the strength of a same-named branch merged into
-  another project's repository whose main lacks the recorded commit (A2; probed, not changed).
+- R14 — A same-named branch merged into another project's repository says nothing of a direct build's accept record:
+  it neither holds the record back nor stands in for it, so the build's own repositories decide (A2's probe; re-cut by
+  accept-record-001 U1, D2 and D3).
 
-WSD25 is assumed in its Given (Q2 in the unit's evidence): the recorded commit is the build's own change on `sample`'s
-main, the strongest record the fixture can hold. Its Then is U2 check 6's.
+WSD25's Given was assumed here (Q2 in this unit's evidence): the recorded commit is the build's own change on
+`sample`'s main, the strongest record the fixture can hold. accept-record-001 U1 check 2 names that Given unchanged and
+re-cuts its Then from U2 check 6's `with the Lead` to `complete` (its D3); its red is in the next subsection.
 
 | # | Rule | Given | When | Then | Expected value from | Test |
 |---|---|---|---|---|---|---|
@@ -1345,10 +1347,56 @@ main, the strongest record the fixture can hold. Its Then is U2 check 6's.
 | WSD22 | R11 | gone; `me/SMPL-482/x` unmerged in `sample`'s repository; other's repository holding it merged into its main | `sample` | U1 reads `awaiting acceptance` | U2-2: "Own unmerged, other merged → `awaiting acceptance`"; D4 row 2 "yes, none merged / any / not in main" | `GoneCaseOwnEvidence.test_reads_a_declared_session_awaiting_acceptance__when_its_own_repositorys_branch_is_unmerged_and_another_projects_repository_holds_it_merged` |
 | WSD23 | R10 | gone; `me/SMPL-482/x` merged in `sample`'s repository; other's repository holding it unmerged | `sample` | U1 reads `complete` | U2-3: "Own merged, other unmerged → `complete` (D4 row 1)". Green at red; owes a kill (every holder must be merged) | `GoneCaseOwnEvidence.test_reads_a_declared_session_complete__when_its_own_repositorys_branch_is_merged_and_another_projects_repository_holds_it_unmerged` |
 | WSD24 | R10 | gone; `me/SMPL-482/x` unmerged in `sample`'s first repository; a second own repository holding it merged into its main | `sample` | U1 reads `complete` | D4 row 1: "yes, merged in one of them / any / in main". Green at red; owes a kill (every own holder must be merged) | `GoneCaseOwnEvidence.test_reads_a_declared_session_complete__when_one_of_its_projects_repositories_holds_its_branch_merged_and_another_unmerged` |
-| WSD25 | R14 | the declared direct build, `me/sample-001-first` fast-forwarded into `sample`'s main, `ACCEPTED.json` naming that main's tip, then torn down (worktree removed, branch deleted); other's repository holding `me/sample-001-first` merged into its main, which lacks the recorded commit | `sample` | U1 reads `with the Lead` | U2-6: "a direct build, worktree gone, `other` holding the same-named branch merged into its main, the recorded accept id absent from `other`'s main → not read as accepted"; not accepted and not in main is `with the Lead` (039-L1, WSD16). *Assumed* in its Given (Q2): the record names `sample`'s accepted commit | `GoneCaseOwnEvidence.test_reads_a_torn_down_declared_direct_build_with_the_lead__when_another_projects_repository_holds_its_branch_merged_without_its_accepted_commit` |
+| WSD25 | R14 | the declared direct build, `me/sample-001-first` fast-forwarded into `sample`'s main, `ACCEPTED.json` naming that main's tip, then torn down (worktree removed, branch deleted); other's repository holding `me/sample-001-first` merged into its main, which lacks the recorded commit | `sample` | U1 reads `complete` | accept-record-001 U1-2: "torn down, `other` holding the branch merged into a main that lacks the recorded commit → `complete`"; its D2: "A merged non-own holder … neither veto nor count", rule 3 "`complete` when `sha` is on the main of any own repository"; its D3: "WSD25 is re-cut to read `complete`". Given from U2-6, assumed there (Q2) and named unchanged by U1-2 | `GoneCaseOwnEvidence.test_reads_a_torn_down_declared_direct_build_complete__when_another_projects_repository_holds_its_branch_merged_without_its_accepted_commit` |
 | WSD26 | R13, R8 | every row of this file at `4ff60bc`, 039-L14, WSD7, WSD8, WSD9, WSD19, WSD20 and the `InMainCache` rows among them | the whole suite | every row passes; no existing test or fixture edited | U2-4: "No holder anywhere → `complete`, as today … the existing row that pins it is cited" (WSD7); U2-5: "Every row in `tests/dash/BEHAVIORS.md` at `4ff60bc` passes with no edit (D7) … The `verified` GONE cache rows in `InMainCache` pass with no edit (D5)". **Declared guard** | every test before `WSD21` |
 
 Expected at red (before the dashboard change; the caller runs it): WSD21, WSD22 and WSD25 fail reading `complete`,
 because today's `any` over every holder takes other's merged branch as evidence. WSD25 fails at red through
 `has_reached_main`; only after U2 does it read `is_accept_recorded` alone. WSD23 and WSD24 pass, and each owes its kill
-in `TEST-LEDGER.md`.
+in `TEST-LEDGER.md`. That was WSD25's red with its Then `with the Lead`; accept-record-001 U1 re-cut it to `complete`.
+
+### A direct build's accept record is read on its own repositories' evidence (accept-record-001 U1)
+
+Written before the code, from the accept-record-001 brief: Goal, Language ("Direct build", "Accept record", "Own
+repositories", "Holder", "Merged into its own main", "Veto, not evidence"), D1, D2 and its rules table, D3, D5, A3,
+A4 and U1 checks 1–3. A direct build's record, with its `sha` read, every own repository answering and no
+verified-cache hit, read top-down, the first rule that applies deciding:
+
+| | Condition | Reads |
+|---|---|---|
+| 1 | A non-own holder whose branch is not in its own main (a git failure included) | `with the Lead` |
+| 2 | One or more own repositories hold the branch | `complete` when any own holder has `sha` on its own main and `sha` is the branch's change there; otherwise `with the Lead` |
+| 3 | No own holder | `complete` when `sha` is on the main of any own repository, otherwise `with the Lead` |
+
+A merged non-own holder, and a non-own repository that cannot say whether it holds the branch, neither veto nor
+count. `has_reached_main` is unchanged and stricter on purpose: with no own holder it is vetoed by a non-own holder
+merged or not (WSD21), since that reading has no record to check; so in every row below the page's reading is
+`is_accept_recorded`'s alone.
+
+Fixture (`AcceptRecordOwnEvidence`): `DeclaredShapeDirectBuild`'s direct build, with `GoneCaseOwnEvidence`'s helpers
+and `DirectAccept`'s `other_main` borrowed unedited. "Torn down" is `given_build_torn_down` (worktree removed, then
+`me/sample-001-first` deleted in `sample`'s repository). "Other's repository" is
+`given_other_repo_with_the_builds_branch`: `<scratch>/repos/other`, which only project `other` names, declared with
+branch `me/{session}`, holding `me/sample-001-first` one commit ahead of its main; "merged" there is
+`given_merged_into_main`, a fast-forward.
+
+Rules:
+- R15 — A direct build's accept record is evidence only on the main of a repository its project names: with no own
+  holder, a record on no own repository's main reads `with the Lead`, whatever another project's repository holds
+  (D1; D2 rule 3).
+- R16 — A repository the project does not name, holding the branch its own shape gives the build unmerged into its
+  own main, holds the build `with the Lead`, whatever the own evidence (D2 rule 1). R14 is the merged case.
+
+| # | Rule | Given | When | Then | Expected value from | Test |
+|---|---|---|---|---|---|---|
+| WSD27 | R15, R14 | the direct build torn down in `sample`'s repository, never merged there; other's repository holding `me/sample-001-first` fast-forwarded into its main; `ACCEPTED.json` naming other's main tip | `sample` | U1 reads `with the Lead` | U1-1: "`ACCEPTED.json` naming `other`'s main tip → `with the Lead`"; D1 "`sha` must be on the main of an own repository"; D2 rule 3; Language "Own repositories", "Veto, not evidence" | `AcceptRecordOwnEvidence.test_reads_a_torn_down_declared_direct_build_with_the_lead__when_its_accept_record_names_the_main_of_another_projects_repository_holding_its_branch_merged` |
+| WSD28 | R16 | WSD25's Given with other's `me/sample-001-first` one commit ahead of its main, unmerged | `sample` | U1 reads `with the Lead` | U1-3: "`other` holding `me/sample-001-first` one commit ahead and unmerged … → `with the Lead`"; D2 rule 1, read first; Language "Veto, not evidence": "only an **unmerged** non-own holder vetoes". Green at red; owes a kill (rule 1 dropped) | `AcceptRecordOwnEvidence.test_reads_a_torn_down_declared_direct_build_with_the_lead__when_its_accept_record_is_on_its_own_main_and_another_projects_repository_holds_its_branch_unmerged` |
+| WSD29 | R16 | 055-A1's build: `robowright/sample-001-first` kept in `sample`'s repository and cherry-picked onto a main that moved, `ACCEPTED.json` naming the pick; `second`'s repository, which only project `notes` names, holding `robowright/sample-001-first` one commit ahead of its main | `sample` | U1 reads `with the Lead` | U1 polish (finish review): "an own holder with the record its change on its main … plus a trusted repository the project does not name holding the build's branch unmerged into its own main → `with the Lead`"; D2 rule 1, read first, "whatever the own evidence"; end-of-stack F1. The cherry-pick keeps `has_reached_main` `False`, so the reading is `is_accept_recorded`'s alone | `AcceptRecordOwnEvidence.test_reads_a_direct_build_with_the_lead__when_its_accept_record_is_its_change_on_its_own_main_and_another_projects_repository_holds_its_branch_unmerged` |
+
+WSD25 (re-cut, above) is this unit's third row: R14, WSD28's fixture with other's branch merged → `complete`.
+
+Expected at red (before the dashboard change; the caller runs it): WSD27 fails reading `complete`, because the record
+is checked in every holder, other's included, and other's fast-forwarded branch tip is the recorded commit. WSD25
+fails reading `with the Lead`, because the record is looked for only in the holder, other, whose main lacks it.
+WSD28 passes, and owes its kill in `TEST-LEDGER.md`. WSD29, added after the code, passes and owes its kill: rule 1 asked only when no own
+repository holds the branch.

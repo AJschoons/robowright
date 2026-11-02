@@ -977,7 +977,7 @@ empty). WSD26 is the declared guard for every existing row (U2 checks 4 and 5).
 | # | Mutation | Predicted | Observed | Verdict |
 |---|---|---|---|---|
 | WSDM-F | the own holders must all be merged (`any` → `all`) | WSD24 | WSD24 | KILLED |
-| WSDM-G | the veto dropped: no own holder reads in main | WSD21 WSD25, maybe WSD8 WSD9 039-L14 | WSD21 WSD25 WSD8 WSD9 039-L14, and two `InMainCache` rows | KILLED; wrong prediction: the two cache rows, where a repository that could not answer must not be read as gone |
+| WSDM-G | the veto dropped: no own holder reads in main | WSD21 WSD25, maybe WSD8 WSD9 039-L14 | WSD21 WSD25 WSD8 WSD9 039-L14, and two `InMainCache` rows | KILLED; wrong prediction: the two cache rows, where a repository that could not answer must not be read as gone. WSD25's Then was re-cut later (accept-record-001 U1, below) |
 | WSDM-H | every holder, own or not, must be merged | WSD23 (corrected before the run: and WSD24) | WSD23 WSD24 | KILLED |
 
 WSDM-F and WSDM-G ran together on disjoint statements: F changes a reading only with two or more own holders, which
@@ -993,3 +993,23 @@ The `is_accept_recorded` probe (U2 check 6) is WSD25, kept as a test. Two findin
   naming `other`'s main tip, where `other`'s same-named branch was fast-forwarded into it, matches `is_change_of`, and
   the build reads `complete` with nothing for it in `sample`'s repository. U2's veto in `has_reached_main` does not
   reach it: `in_main_slugs` ORs the two readings.
+
+Both findings were fixed by accept-record-001 U1 (below), WSD25 re-cut to `complete`.
+
+## An accept record on its own repositories' evidence (accept-record-001 U1)
+
+WSD27 and WSD25 (re-cut to `complete`) were red before the code, each on its Then (`complete` for `with the Lead`,
+and the reverse). WSD28 was green at red, as predicted, and owed a kill. Whole suite per round, one mutation per round
+(each touches the lines the others do), kill sets predicted in writing first; `tools/robowright-dash.py` restored
+after each (`git status --short` empty).
+
+| # | Mutation | Predicted | Observed | Verdict |
+|---|---|---|---|---|
+| WSDM-I | rule 1 dropped: no non-own holder vetoes | WSD28, 055-A9, 061-D10 (its second refresh) | WSD28, 055-A9, 061-D10 | KILLED |
+| WSDM-J | the record read in every holder again (`own_holders` → `holders` on both lines) | WSD27, WSD25 | WSD27, WSD25 | KILLED |
+| WSDM-K | every non-own holder vetoes, merged or not | WSD25 | WSD25 | KILLED |
+| WSDM-L | rule 1 asked of own holders too | 055-A1, 055-A10, maybe 061-D2, 061-D3 | 055-A1, 055-A10, 061-D2, 061-D3, 061-D8 | KILLED; wrong prediction: 061-D8, whose record names a cherry-pick, which leaves the own branch unmerged |
+| WSDM-M | rule 1 asked only when no own repository holds the branch (`if not own_holders and any(…)`) | WSD29 | WSD29 | KILLED |
+
+WSDM-M is the finish review's polish round, outside the unit's four: WSD29 was written after the code, so its red
+is this mutation.

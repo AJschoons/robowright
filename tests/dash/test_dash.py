@@ -8244,14 +8244,68 @@ class GoneCaseOwnEvidence(DashScratch):
 
     # ------------------------------------------------------------ the accept record probe (A2)
 
-    def test_reads_a_torn_down_declared_direct_build_with_the_lead__when_another_projects_repository_holds_its_branch_merged_without_its_accepted_commit(self):
-        """WSD25 — the direct build fast-forwarded into `sample`'s main, `ACCEPTED.json` naming that tip, then torn down, while `other`'s repository holds `me/sample-001-first` merged into a main that lacks the recorded commit: with the Lead — a same-named branch merged in another project's repository reads as this build's accept (assumed Q2)."""
+    def test_reads_a_torn_down_declared_direct_build_complete__when_another_projects_repository_holds_its_branch_merged_without_its_accepted_commit(self):
+        """WSD25 — the direct build fast-forwarded into `sample`'s main, `ACCEPTED.json` naming that tip, then torn down, while `other`'s repository holds `me/sample-001-first` merged into a main that lacks the recorded commit: complete — a merged same-named branch in another project's repository says nothing, yet it holds a really accepted build with the Lead forever."""
         self.given_declared_direct_build()
         self.given_merged_into_main(self.repo, DIRECT_BRANCH)
         self.given_record(self.rev("rev-parse", "main"))
         self.given_build_torn_down()
         other = self.given_other_repo_with_the_builds_branch()
         self.given_merged_into_main(other, DIRECT_BRANCH)
+
+        self.assert_unit_reads("complete")
+
+
+class AcceptRecordOwnEvidence(DashScratch):
+    """WSD27–WSD29 (accept-record-001 U1) — a direct build's accept record is checked on the evidence of the
+    repositories its project names; a trusted repository it does not name, holding the branch its own shape gives the
+    build, vetoes the record only while that branch is unmerged into its own main. `DeclaredShapeDirectBuild`'s
+    fixture, `GoneCaseOwnEvidence`'s helpers borrowed unedited."""
+
+    assert_unit_reads = InMainTruth.assert_unit_reads
+    given_declared_direct_build = DeclaredShapeDirectBuild.given_declared_direct_build
+    given_change_description = InMainTruth.given_change_description
+    given_branch_ahead_of_main = GoneCaseOwnEvidence.given_branch_ahead_of_main
+    given_merged_into_main = GoneCaseOwnEvidence.given_merged_into_main
+    given_build_torn_down = GoneCaseOwnEvidence.given_build_torn_down
+    given_other_repo_with_the_builds_branch = GoneCaseOwnEvidence.given_other_repo_with_the_builds_branch
+    given_record = DirectAccept.given_record
+    rev = DirectAccept.rev
+    other_main = DirectAccept.other_main
+    given_trusted_repo = InMainTruth.given_trusted_repo
+    given_outside_worktree = InMainTruth.given_outside_worktree
+    given_picked_onto_a_moved_main = DirectAccept.given_picked_onto_a_moved_main
+    given_second_trusted_repo_holding_the_branch = InMainCache.given_second_trusted_repo_holding_the_branch
+
+    # ------------------------------------------------------------ only an own main is evidence
+
+    def test_reads_a_torn_down_declared_direct_build_with_the_lead__when_its_accept_record_names_the_main_of_another_projects_repository_holding_its_branch_merged(self):
+        """WSD27 — the direct build torn down in `sample`'s repository, `other`'s repository holding `me/sample-001-first` fast-forwarded into its main, and `ACCEPTED.json` naming `other`'s main tip: with the Lead — a record pointing at another project's merge of a same-named branch reads as this build's accept."""
+        self.given_declared_direct_build()
+        self.given_build_torn_down()
+        other = self.given_other_repo_with_the_builds_branch()
+        self.given_merged_into_main(other, DIRECT_BRANCH)
+        self.given_record(self.other_main(other))
+
+        self.assert_unit_reads("with the Lead")
+
+    # ------------------------------------------------------------ an unmerged branch elsewhere vetoes
+
+    def test_reads_a_torn_down_declared_direct_build_with_the_lead__when_its_accept_record_is_on_its_own_main_and_another_projects_repository_holds_its_branch_unmerged(self):
+        """WSD28 — the direct build fast-forwarded into `sample`'s main, `ACCEPTED.json` naming that tip, then torn down, while `other`'s repository holds `me/sample-001-first` one commit ahead of its main: with the Lead — a same-named branch still unmerged in another project's repository is work that could be lost, and the record lands the build over it unseen."""
+        self.given_declared_direct_build()
+        self.given_merged_into_main(self.repo, DIRECT_BRANCH)
+        self.given_record(self.rev("rev-parse", "main"))
+        self.given_build_torn_down()
+        self.given_other_repo_with_the_builds_branch()
+
+        self.assert_unit_reads("with the Lead")
+
+    def test_reads_a_direct_build_with_the_lead__when_its_accept_record_is_its_change_on_its_own_main_and_another_projects_repository_holds_its_branch_unmerged(self):
+        """WSD29 — 055-A1's build, its branch kept and main's cherry-pick of it named by `ACCEPTED.json`, while `second`'s repository, which only project `notes` names, holds `robowright/sample-001-first` one commit ahead of its main: with the Lead — the veto is skipped whenever the build's own repository holds its branch, and the record lands it over work another repository could lose."""
+        self.given_picked_onto_a_moved_main()
+        self.given_record(self.rev("rev-parse", "main"))
+        self.given_second_trusted_repo_holding_the_branch()
 
         self.assert_unit_reads("with the Lead")
 

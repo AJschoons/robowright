@@ -740,10 +740,12 @@ def is_change_of(repo: str, sha: str, branch: str) -> bool:
 
 
 def is_accept_recorded(session: dict, trusted: list, verified: dict | None) -> bool:
-    """A direct build's accept record names a commit on main in a trusted repository its project names, and while
-    its shape's branch is still in any trusted repository, a commit on that repository's main carrying the branch's
-    change. The project folder is session-writable, so the record alone is not evidence; once the branch is gone there is
-    nothing left to compare, or to lose."""
+    """A direct build's accept record is evidence only in a trusted repository its project names: a commit on the main of
+    one that holds its shape's branch, carrying the branch's change there, or, when none of them holds it, a commit on
+    the main of any of them; once the branch is gone there is nothing left to compare, or to lose. The project folder is
+    session-writable, so the record alone is not evidence. A repository the project does not name, holding its own
+    shape's branch unmerged into its own main, vetoes: that may be the build's unaccepted work. Merged, it says nothing,
+    unlike in has_reached_main, which has no record to check. A cached id returns before the veto."""
     sha = recorded_accept(session)
     if sha and verified is not None and verified.get(session["slug"]) == sha:
         return True
@@ -755,9 +757,12 @@ def is_accept_recorded(session: dict, trusted: list, verified: dict | None) -> b
     if any(held.get(repo) is None for repo in repos):
         return False
     holders = [repo for repo, is_held in held.items() if is_held]
-    on_main = [repo for repo in (holders or repos)
+    if any(not is_branch_in_main(repo, branches[repo], trusted) for repo in holders if repo not in repos):
+        return False
+    own_holders = [repo for repo in holders if repo in repos]
+    on_main = [repo for repo in (own_holders or repos)
                if git(repo, "merge-base", "--is-ancestor", "--end-of-options", sha, default_branch(repo, repo, trusted)) is not None]
-    is_recorded = any(is_change_of(repo, sha, branches[repo]) for repo in on_main) if holders else bool(on_main)
+    is_recorded = any(is_change_of(repo, sha, branches[repo]) for repo in on_main) if own_holders else bool(on_main)
     # Held only when every trusted repository answered: one that could not may hold the branch.
     if is_recorded and verified is not None and None not in held.values():
         verified[session["slug"]] = sha
