@@ -16,7 +16,92 @@ The inspection from robowright.dev. A Worker is building unit 2 of a three-unit 
 
 </details>
 
-To run a project, start from [`MANUAL.md`](MANUAL.md); anything it does not cover is asked with `/robowright help <your question>`.
+To run a project, start from [`MANUAL.md`](MANUAL.md); anything it does not cover is asked with
+`/robowright help <your question>`.
+Robowright is thorough rather than fast: you plan once with it, then check back in hours, not
+minutes.
+
+## Quickstart
+
+```sh
+# a folder no session is granted; see "Where to clone it"
+git clone https://github.com/AJschoons/robowright.git ~/src/robowright
+bash ~/src/robowright/install.sh
+mkdir -p ~/src/onboard && cd ~/src/onboard    # start it here, never in the clone, ~ or ~/.claude; see "Where to clone it"
+claude    # then, inside the session: /robowright-onboard
+```
+
+`install.sh` links every skill and agent into `~/.claude`, and writes `rw-git` into `~/.local/bin`
+as a small wrapper file.
+`/robowright-onboard` checks the install, interviews you, writes your machine profile, `launch.json`
+and a first project hook, links four entry points into `~/.local/bin`, and ends on a green
+`tests/run.sh`.
+It also offers to create the scrub gate's pattern list, empty, at
+`${ROBOWRIGHT_DENYLIST:-~/.config/robowright/denylist}`: your own names that must never enter a
+commit from this machine.
+The maintainer's patterns are never in it.
+
+### Where to clone it
+
+Clone it into a folder no Claude Code session is granted. The launcher, the hooks and `rw-git` run as you, outside
+the sandbox, from this clone: a session that can write it can change what they do. To work on Robowright itself,
+use a second clone. `SECURITY.md` → The recommended setup has the rest, step by step.
+
+<details>
+<summary>The recommended setup, in short</summary>
+
+- Keep your repositories under one root folder, grant no folder in your user settings, since a folder granted there
+  reaches every session the launcher starts, and start your own Desktop sessions in the root instead.
+- Put leaf denies on `**/.git`, `**/.claude` and `**/.mcp.json`, and a deny on the folder you install from, in the
+  root's `.claude/settings.json`, a link into that folder; a session started in the root then writes git only
+  through `rw-git`.
+- Name the root in `launch.json`'s `desktop_roots`, and put `rw-git *` in `sandbox.excludedCommands` and
+  `Bash(rw-git *)` in `permissions.allow`.
+- Run `git config --global safe.bareRepository explicit` and `git config --global core.fsmonitor false`.
+- Deny `~/.local/bin`, `~/Library/LaunchAgents`, `~/.ssh` and `~/.config/git` in your user settings, and never start
+  a session in your home folder, since a session started there is granted it whole.
+- The cost: a session started in a project folder or a repository gets none of the root's denies (measured with
+  `claude -p`; Desktop sessions below the root are unmeasured).
+- The limit: code an agent writes that you later build or run runs as you.
+
+</details>
+
+## Your first run
+
+A command that starts with `/` is a Claude Code skill, typed into a Claude Code session;
+`role-start`, `run-launch.sh` and the dashboard are shell commands, typed into a terminal.
+That session can run in a terminal or in the Desktop app's Code tab, so `/one-off`,
+`/loop /lead watch` and `/robowright help` work in either. `role-start` stays a terminal command,
+and a Desktop session does not replace it: it starts the role at the model and effort your
+`robowright.json` and `launch.json` set, where a Desktop session runs on the app's own model picker.
+
+```sh
+claude --permission-mode plan    # in a terminal, in a project folder; never in the clone, ~ or ~/.claude
+/one-off <ask>                   # inside that session
+```
+
+This is for one to three hours of work: you plan it in your own console, one Worker builds it with
+no Lead, and you accept it.
+Depth: [`MANUAL.md` → A small piece of work](MANUAL.md#a-small-piece-of-work).
+
+## Your first big job
+
+```
+# in a terminal
+role-start planner
+# inside the session it opened
+Run the `planner` skill from scratch for project `<project>`. Inputs: time box = `<X weeks or none>`, designs = `<link or N/A>`, prior discussion = `<links or N/A>`, related tracker items = `<comma list or N/A>`, related docs = `<paths/links or N/A>`. Start with Phase 1; ask me for anything missing before proceeding.
+# in a terminal, once the plan and the first brief exist
+role-start lead <project>
+# inside the session it opened
+/loop /lead watch    # only if your launch.json sends the Lead no first prompt
+```
+
+The Planner plans the project with you and ends when the plan and the first brief exist.
+The Lead then launches each Robowright Session, watches it from disk and calls you only for what
+is yours.
+Depth: [`MANUAL.md` → Plan a project](MANUAL.md#plan-a-project) and
+[→ Start it](MANUAL.md#start-it).
 
 Robowright turns Claude Code into a small crew. You thoroughly plan with one session, and the
 rest runs without you: each change is built in its own git worktree, gated by a reviewer that
@@ -40,67 +125,27 @@ tool, or a CI system.
 
 The roles are a building crew. The five-minute tour is
 `skills/robowright/README.md`; the as-built map is `skills/robowright/ARCHITECTURE.md`.
+The run profile that picks a Worker's model is in [`MANUAL.md` → The levers](MANUAL.md#the-levers).
 
-| | Role |
-|---|---|
-| | **① Owner**, the client: you. You approve the plan, answer what only a person should, and accept the work. |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/roles/planner-dark.svg"><img src="assets/roles/planner-light.svg" width="64" height="64" alt="Planner glyph"></picture> | **② Planner**, the architect: scopes the project with you and draws each brief, the contract a session builds to. |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/roles/lead-dark.svg"><img src="assets/roles/lead-light.svg" width="64" height="64" alt="Lead glyph"></picture> | **③ Lead**, the superintendent: watches every session from disk and calls you only when a call is yours. |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/roles/worker-dark.svg"><img src="assets/roles/worker-light.svg" width="64" height="64" alt="Worker glyph"></picture> | **④ Worker**, the crew: builds the brief unit by unit in its own worktree, for hours, with nobody watching. |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/roles/reader-dark.svg"><img src="assets/roles/reader-light.svg" width="64" height="64" alt="Reader glyph"></picture> | **④ Reader**, the runner: reads one big log or tree and fetches back one fact. |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/roles/reviewer-dark.svg"><img src="assets/roles/reviewer-light.svg" width="64" height="64" alt="Reviewer glyph"></picture> | **⑤ Reviewer**, the inspector: signs off every unit and the whole stack from a fresh context. |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/roles/explainer-dark.svg"><img src="assets/roles/explainer-light.svg" width="64" height="64" alt="Explainer glyph"></picture> | **⑥ Explainer**, the handover: writes the brief you read before you review what got built. |
+| | Role | Model |
+|---|---|---|
+| | **① Owner**, the client: you. You approve the plan, answer what only a person should, and accept the work. | — |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/roles/planner-dark.svg"><img src="assets/roles/planner-light.svg" width="64" height="64" alt="Planner glyph"></picture> | **② Planner**, the architect: scopes the project with you and draws each brief, the contract a session builds to. | Fable |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/roles/lead-dark.svg"><img src="assets/roles/lead-light.svg" width="64" height="64" alt="Lead glyph"></picture> | **③ Lead**, the superintendent: watches every session from disk and calls you only when a call is yours. | Opus |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/roles/worker-dark.svg"><img src="assets/roles/worker-light.svg" width="64" height="64" alt="Worker glyph"></picture> | **④ Worker**, the crew: builds the brief unit by unit in its own worktree, for hours, with nobody watching. | Opus, or Sonnet by run profile |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/roles/reader-dark.svg"><img src="assets/roles/reader-light.svg" width="64" height="64" alt="Reader glyph"></picture> | **④ Reader**, the runner: reads one big log or tree and fetches back one fact. | Haiku |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/roles/reviewer-dark.svg"><img src="assets/roles/reviewer-light.svg" width="64" height="64" alt="Reviewer glyph"></picture> | **⑤ Reviewer**, the inspector: signs off every unit and the whole stack from a fresh context. | Opus for code, Sonnet for prose |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="assets/roles/explainer-dark.svg"><img src="assets/roles/explainer-light.svg" width="64" height="64" alt="Explainer glyph"></picture> | **⑥ Explainer**, the handover: writes the brief you read before you review what got built. | Opus |
 
 ## The dashboard
 
-`python3 tools/robowright-dash.py --serve 8765` serves a read-only view of every project and
-Robowright Session on `127.0.0.1`. Below, three example projects: an iOS notes app, an Android
-todo app and a web store.
+`python3 ~/src/robowright/tools/robowright-dash.py --serve 8765` serves a read-only view of every
+project and Robowright Session on `127.0.0.1`, or a session can start it for you.
+Below, three example projects: an iOS notes app, an Android todo app and a web store.
 
 <img src="assets/dashboard-index.png" alt="The dashboard index: three example projects and their Robowright Sessions">
 
 <img src="assets/dashboard-project.png" alt="The dashboard page for the example notes app: its task breakdown and its Robowright Sessions">
-
-## Quickstart
-
-```sh
-# a folder no session is granted; see "Where to clone it"
-git clone https://github.com/AJschoons/robowright.git ~/src/robowright
-bash ~/src/robowright/install.sh
-mkdir -p ~/src/onboard && cd ~/src/onboard    # start it here, never in the clone, ~ or ~/.claude; see "Where to clone it"
-claude    # then, inside the session: /robowright-onboard
-bash ~/src/robowright/tests/run.sh    # the last line is EXIT=0
-```
-
-`install.sh` links every skill and agent into `~/.claude`, and writes `rw-git` into `~/.local/bin` as a small
-wrapper file.
-`/robowright-onboard` checks the
-install, interviews you, writes your machine profile, `launch.json` and a first project hook,
-links four entry points into `~/.local/bin`, and ends on the same green run.
-
-It also offers to create the scrub gate's pattern list, empty, at
-`${ROBOWRIGHT_DENYLIST:-~/.config/robowright/denylist}`: your own names that must never enter a
-commit from this machine. The maintainer's patterns are never in it.
-
-### Where to clone it
-
-Clone it into a folder no Claude Code session is granted. The launcher, the hooks and `rw-git` run as you, outside
-the sandbox, from this clone: a session that can write it can change what they do. To work on Robowright itself,
-use a second clone. `SECURITY.md` → The recommended setup has the rest, step by step:
-
-- keep your repositories under one root folder, grant no folder in your user settings, since a folder granted there
-  reaches every session the launcher starts, and start your own Desktop sessions in the root instead;
-- put leaf denies on `**/.git`, `**/.claude` and `**/.mcp.json`, and a deny on the folder you install from, in the
-  root's `.claude/settings.json`, a link into that folder; a session started in the root then writes git only
-  through `rw-git`;
-- name the root in `launch.json`'s `desktop_roots`, and put `rw-git *` in `sandbox.excludedCommands` and
-  `Bash(rw-git *)` in `permissions.allow`;
-- run `git config --global safe.bareRepository explicit` and `git config --global core.fsmonitor false`;
-- deny `~/.local/bin`, `~/Library/LaunchAgents`, `~/.ssh` and `~/.config/git` in your user settings, and never start
-  a session in your home folder, since a session started there is granted it whole;
-- the cost: a session started in a project folder or a repository gets none of the root's denies (measured with
-  `claude -p`; Desktop sessions below the root are unmeasured);
-- the limit: code an agent writes that you later build or run runs as you.
 
 ## Requirements
 
@@ -108,6 +153,13 @@ use a second clone. `SECURITY.md` → The recommended setup has the rest, step b
 - `python3`, `bash`, `git` and `jq` on `PATH`.
 - Claude Code, with a Claude subscription (budgeted in plan usage) or an API key (budgeted in
   dollars). The two examples under `examples/` show one of each.
+- Several things stop a run nobody is watching before it finishes, among them: the brief's
+  wall-hours allowance; on an API key, a dollar cap in each brief; on a subscription, `usage-guard`
+  writing `STOP` into every running or resumable session at a plan-usage threshold; and a `STOP`
+  file you create in the session's folder.
+  See [`MANUAL.md` → Spend](MANUAL.md#spend).
+- The skills and agents are Markdown files Claude Code loads; the launcher, `run-launch.sh` and
+  `role-start`, is what builds the `claude` command that starts each session.
 
 ## Layout
 
@@ -121,8 +173,6 @@ use a second clone. `SECURITY.md` → The recommended setup has the rest, step b
 | `assets/` | The logo, the inspection loop, the role glyphs and the dashboard screenshots this page shows, and the hero drawing the site shares | No |
 | `MANUAL.md` | The operating manual: the commands for running a project, task by task | No |
 | `.claude/robowright/project.md` | This repository's own project hook | No |
-
-`install.sh` links only `skills/` and `agents/`, and writes the `rw-git` wrapper into `~/.local/bin`.
 
 ## Support
 
