@@ -24,11 +24,16 @@ minutes.
 ## Quickstart
 
 ```sh
-# a folder no session is granted; see "Where to clone it"
+# A folder no session is granted; see "Where to clone it"
 git clone https://github.com/AJschoons/robowright.git ~/src/robowright
+
 bash ~/src/robowright/install.sh
-mkdir -p ~/src/onboard && cd ~/src/onboard    # start it here, never in the clone, ~ or ~/.claude; see "Where to clone it"
-claude    # then, inside the session: /robowright-onboard
+
+# Start it here, never in the clone, ~ or ~/.claude; see "Where to clone it"
+mkdir -p ~/src/onboard && cd ~/src/onboard
+
+# Start a session, then type /robowright-onboard inside it
+claude
 ```
 
 `install.sh` links every skill and agent into `~/.claude`, and writes `rw-git` into `~/.local/bin`
@@ -76,8 +81,11 @@ and a Desktop session does not replace it: it starts the role at the model and e
 `robowright.json` and `launch.json` set, where a Desktop session runs on the app's own model picker.
 
 ```sh
-claude --permission-mode plan    # in a terminal, in a project folder; never in the clone, ~ or ~/.claude
-/one-off <ask>                   # inside that session
+# In a terminal, in a project folder; never in the clone, ~ or ~/.claude
+claude --permission-mode plan
+
+# Inside that session
+/one-off <ask>
 ```
 
 This is for one to three hours of work: you plan it in your own console, one Worker builds it with
@@ -87,14 +95,17 @@ Depth: [`MANUAL.md` → A small piece of work](MANUAL.md#a-small-piece-of-work).
 ## Your first big job
 
 ```
-# in a terminal
+# In a terminal
 role-start planner
-# inside the session it opened
+
+# Inside the session it opened
 Run the `planner` skill from scratch for project `<project>`. Inputs: time box = `<X weeks or none>`, designs = `<link or N/A>`, prior discussion = `<links or N/A>`, related tracker items = `<comma list or N/A>`, related docs = `<paths/links or N/A>`. Start with Phase 1; ask me for anything missing before proceeding.
-# in a terminal, once the plan and the first brief exist
+
+# In a terminal, once the plan and the first brief exist
 role-start lead <project>
-# inside the session it opened
-/loop /lead watch    # only if your launch.json sends the Lead no first prompt
+
+# Inside the session it opened, only if your launch.json sends the Lead no first prompt
+/loop /lead watch
 ```
 
 The Planner plans the project with you and ends when the plan and the first brief exist.

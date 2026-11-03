@@ -24,7 +24,9 @@ folder that is not the clone, for the reason "Where to clone it" gives, not your
 ```sh
 git clone https://github.com/AJschoons/robowright.git <clone>
 bash <clone>/install.sh
-claude    # then, inside the session: /robowright-onboard
+
+# Start a session, then type /robowright-onboard inside it
+claude
 ```
 
 Depth: [`skills/robowright-onboard/SKILL.md`](skills/robowright-onboard/SKILL.md), and
@@ -56,7 +58,9 @@ to run in a terminal, and once you say it ran, the Lead records the session with
 
 ```
 role-start lead <project>
-/loop /lead watch    # only if your launch.json sends the Lead no first prompt
+
+# Only if your launch.json sends the Lead no first prompt
+/loop /lead watch
 ```
 
 Depth: [`skills/lead/SKILL.md` → Launch hand-off](skills/lead/SKILL.md#launch-hand-off).
@@ -127,9 +131,14 @@ ask with you in the chat. A Robowright Session that stopped three times gets a r
 Planner rewrites its brief.
 
 ```
-/planner brief <unit>              # the Lead starts this Planner
-/planner replan <project> <ask>    # you start this one
-/planner rebrief <session_dir>     # the Lead starts this Planner
+# The Lead starts this Planner
+/planner brief <unit>
+
+# You start this one
+/planner replan <project> <ask>
+
+# The Lead starts this Planner
+/planner rebrief <session_dir>
 ```
 
 Depth: `skills/planner/SKILL.md` → [Brief-only session](skills/planner/SKILL.md#brief-only-session-every-unit-after-the-first),
@@ -147,7 +156,10 @@ sets a spend threshold or cap; `run-cost.py` always does, meaningful only under 
 ```
 claude-usage
 usage-guard --threshold 85 --watch 60
-python3 <clone>/skills/robowright/scripts/robowright-cost.py --by project    # or unit, role, model
+
+# Group by project, unit, role or model
+python3 <clone>/skills/robowright/scripts/robowright-cost.py --by project
+
 python3 <clone>/skills/worker/scripts/run-cost.py --run-dir <session_dir>
 /spend-debug <project>
 ```
@@ -172,7 +184,9 @@ write](SECURITY.md#values-a-session-can-write) says why.
 ```
 ~/.claude/skills/lead/scripts/accept.sh [-S] --tip <tip> --message <session_dir>/prs/<unit>/commit-message.txt <session_dir>
 ~/.claude/skills/lead/scripts/accept.sh --direct [-S] --base <base> --tip <tip> --message <project_dir>/prs/<unit>/commit-message.txt <project_dir> <unit>
-/explainer report <project>    # the Lead starts this Explainer
+
+# The Lead starts this Explainer
+/explainer report <project>
 ```
 
 Depth: [`skills/lead/SKILL.md` → What already exists](skills/lead/SKILL.md#what-already-exists--use-it-do-not-rebuild-it),
